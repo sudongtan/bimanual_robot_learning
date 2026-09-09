@@ -27,6 +27,36 @@ uv refuses to install both into one environment — they resolve different torch
 builds (PyPI CPU/MPS for Mac, cu128 for the Linux GPU box). Single `uv.lock`
 covers both.
 
+## 2026-09-09 — spec read, checked against CLAUDE.md
+
+Read `docs/challenge_spec.pdf` (5pp). Rubric matches CLAUDE.md exactly
+(30/20/15/20/10/5) and so do the five deliverables. Two divergences worth
+recording:
+
+**Core Ultra is "preferred", not the only permitted target.** CLAUDE.md calls
+Core Ultra Series 2/3 a hard, non-negotiable requirement. The spec's Platform
+Requirements say: *target system* is "Intel Core Ultra AI PC / NUC, **or a local
+execution environment with Intel CPU and iGPU acceleration**"; Core Ultra
+Series 2/3 is listed separately as *preferred deployment hardware*. The hard
+requirement is "run the final simulation on Intel hardware". The i7-8565U
+(Intel CPU + UHD 620 iGPU) therefore satisfies the platform floor and gives a
+real fallback — but the OpenVINO rubric line names Core Ultra 2/3 explicitly,
+so the fallback likely costs points rather than zeroing them. Keep sourcing
+Core Ultra; stop treating it as an existential blocker. Spec wins over
+CLAUDE.md here, per CLAUDE.md's own ground-truth rule.
+
+**Asset list is short a bottle, and the cup is a mug.** The spec's dual-arm
+example is "one arm holding a mug while the other pours **from a bottle**", and
+the sample command is "pick up the mug with arm B, pour water into the mug with
+arm A". CLAUDE.md's Phase 1 asset list has plate, cup, 2 spoons, 2 forks — no
+bottle. Scene needs: table, drawer, plate, mug, bottle, 2 spoons, 2 forks,
+water proxy.
+
+**SO-101 model sourced and verified.** TheRobotStudio/SO-ARM100
+`Simulation/SO101`, Apache 2.0, so vendoring the meshes into `sim/assets/` with
+the license notice is fine. Loads and steps stably under mujoco 3.12.0. Using
+the `new_calib` variant. Details in the untracked notes.
+
 ## Pending decisions
 
 - **Policy family** — ACT vs SmolVLA vs Pi0.5. Plan of record: ACT first to
