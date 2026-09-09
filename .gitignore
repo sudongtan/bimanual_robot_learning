@@ -1,0 +1,38 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.uv_cache/
+
+# Datasets & checkpoints — never commit these (judges clone this repo)
+data/**
+!data/README.md
+policy/checkpoints/
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+
+# Model artifacts
+*.onnx
+*.bin
+*.xml.data
+openvino_bench/ir/
+
+# Eval output: videos and rollout dumps
+eval/runs/
+eval/videos/
+*.mp4
+*.gif
+
+# Training logs
+wandb/
+runs/
+outputs/
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
