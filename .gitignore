@@ -32,6 +32,10 @@ runs/
 outputs/
 *.log
 
+# Personal / untracked
+CLAUDE.md
+notes/
+
 # OS / editor
 .DS_Store
 .idea/
