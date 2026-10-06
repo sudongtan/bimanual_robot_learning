@@ -1,82 +1,81 @@
-# Bimanual VLA — Table Setting (Intel Physical AI Online Challenge)
+# Goal
 
-Two simulated **SO-101** arms in **MuJoCo**, driven by natural-language
-instructions plus camera observations, with inference optimized via
-**OpenVINO** for Intel Core Ultra Series 2/3.
+Build an end-to-end bimanual robot learning system in MuJoCo:
 
-> **Status: Phase 0 (scaffolding).** The environment, task, policy and
-> benchmark are not implemented yet. This README documents the reproduction
-> path as it lands; sections marked _(pending)_ are placeholders.
+**Natural language + camera observations → learned policy → coordinated SO-101 actions → waste sorted at the table**
 
----
+Main progression:
 
-## Quick start
+**Scripted expert → Behavioral Cloning → ACT → VLA → optional RL → OpenVINO deployment**
 
-Requires [`uv`](https://docs.astral.sh/uv/) and Python 3.12.
+# Task
 
-```bash
-git clone <this-repo> && cd bimanual_vla
-uv sync --extra local
-uv run python scripts/check_env.py
-```
+## The story: sorting waste where it is made
 
-`--extra local` is the path judges should use: sim, evaluation, demo, and
-OpenVINO export/benchmark. It installs a CPU/MPS torch and does not need a GPU.
+Dinner is over. The table holds a mix of things that all leave by different
+routes: a half-finished bottle of water, an empty drink can, a mug with some
+coffee left in it, a plate with food scraps, used cutlery.
 
-### Training environment (not needed to reproduce results)
+Recycling only works if each item goes into the right stream, and goes in
+empty and clean enough to be processed. A bottle with liquid still in it, a can
+dropped in the plastic bin, or a fork thrown away with the rubbish all undo
+the effort further down the line. The easiest place to get it right is the
+table itself, before anything is mixed.
 
-```bash
-uv sync --extra train    # on a CUDA Linux box; pulls torch from the cu128 index
-```
+That is the robot's job. Two SO-101 arms mounted at the edge of the table
+(arm A on the left, arm B on the right) take each item, empty it if needed,
+and send it to the right waste stream.
 
-`local` and `train` are declared as **conflicting extras** in
-[pyproject.toml](pyproject.toml) — they resolve different torch builds and must
-not be installed into the same environment. The CUDA index is pinned to
-`cu128`; change it to match the rented instance's CUDA version.
+## Where everything goes
 
----
-
-## Repository layout
-
-| Path | Contents |
+| Waste stream | Destination |
 |---|---|
-| [docs/](docs/) | `challenge_spec.pdf` (source of truth), architecture notes, [decisions log](docs/decisions.md) |
-| [sim/](sim/) | MuJoCo scene XML, meshes, Gymnasium env wrapper, domain-randomization config |
-| [data/](data/) | Collected LeRobot demonstration datasets (gitignored — see [data/README.md](data/README.md)) |
-| [policy/](policy/) | Model definitions, training configs, checkpoints |
-| [inference/](inference/) | Runtime pipeline: perception → reasoning/planning → bimanual policy → action |
-| [openvino_bench/](openvino_bench/) | ONNX/IR conversion, NNCF quantization, latency+throughput benchmark |
-| [eval/](eval/) | 10 fixed seed configs, success-rate harness, video capture |
-| [scripts/](scripts/) | `check_env.py`, `run_train.sh`, `run_eval.sh`, `run_bench.sh` |
+| Plastic recycling | plastic bin (under-table pull-out drawer) |
+| Metal recycling | metal bin (under-table pull-out drawer) |
+| Food waste | food-waste container on the table |
+| Reuse (to wash) | "to wash" basket on the table |
 
----
+## Tasks
 
-## Deliverables → rubric
+Arm A is the left arm, arm B the right arm. Implementation notes per task:
+[docs/tasks.md](docs/tasks.md).
 
-| # | Deliverable | Rubric | Status |
-|---|---|---|---|
-| 1 | Reproducible repo (setup, deps, assets, train/eval/infer) | Reproducibility 10 | scaffolded |
-| 2 | MuJoCo sim + domain randomization + eval config | Task Completion 30 / Robustness 15 | _pending_ |
-| 3 | Intel inference benchmark (latency, throughput, device, precision) | OpenVINO/Intel 20 | _pending_ |
-| 4 | Demo video, 10 randomized seeds | Robustness 15 / Task Completion 30 | _pending_ |
-| 5 | Technical README / architecture summary | Technical Quality 10 / Innovation 5 | in progress |
+| ID | Instruction | Success |
+|---|---|---|
+| T1 `can_to_metal_bin` | "Pick up the tomato soup can with arm A, open the metal bin with arm B, and put the can in the metal bin with arm A." | the can is in the metal bin |
+| T2 `cup_to_plastic_bin` | "Pick up the plastic cup with arm B, open the plastic bin with arm A, and put the cup in the plastic bin with arm B." | the cup is in the plastic bin |
+| T3 `handoff_can_to_metal_bin` | "Pick up the tomato soup can with arm A, hand it to arm B, and put it in the metal bin with arm B." | the can is in the metal bin, handed over without touching the table |
+| T4 `empty_bottle` | "Hold the food-waste container with arm A, and pour the leftover water from the bottle into it with arm B." | the water ends up in the container |
+| T5 `mug_to_wash_basket` | "Put the mug in the to-wash basket." | the mug is in the basket |
+| T6 `clear_the_table` | "Clear the table." | every item is in its correct destination |
 
----
+## Phases
 
-## Architecture
+1) Build scenes with randomization and the Bimanual MuJoCo Environment
+2) Generate Expert Demonstrations
+3) train and evaluate behaviour clone baseline
+4) train and evaluate ACT
+5) finetune and evaluate VLA
+6) Optional: train and evaluate diffusion policy
+7) Optional: reinforcement learning
+8) OpenVINO deployment
 
-_(pending — Phase 3.)_ Planned: instruction parser decomposes a compound
-command into ordered subtask primitives; a learned low-level policy (ACT
-first, SmolVLA as the upgrade path) executes each primitive; post-condition
-checks drive retry/replan. Rationale and trade-offs in
-[docs/decisions.md](docs/decisions.md).
+## Steps
+1) T1 and phase 1, 2, 3, 4, 5, 8
+progress: 
+phase 2 is only half done. The smoke test showed that the expert works (50/50), but it didn't record anything. Phase 2 means generating demonstrations, a saved dataset, and none exists yet.
 
-## OpenVINO results
+Phase (your README)	T1 status
+1 Scene with randomization + environment	done for T1 (only the can's position and rotation are randomized)
+2 Expert demonstrations	expert done, recording not started
+3 BC, train + evaluate	not started
+4 ACT	not started
+5 VLA	not started
+8 OpenVINO	not started
+To finish phase 2: run the expert through the environment for about 50 seeds and save each successful episode in LeRobot's dataset format. That's what LeRobot's BC and ACT training reads. Each recorded step would contain:
 
-_(pending — Phase 6.)_ Will report mean/p95 latency, throughput, device
-(CPU / iGPU / NPU) and precision (FP32 / INT8), plus the success-rate delta
-between the FP32 PyTorch policy and the INT8 IR model.
-
-## Known limitations
-
-_(pending.)_
+camera images;
+the 12 joint positions (the state);
+the 12 joint targets (the action);
+the task instruction;
+the seed and a success flag.

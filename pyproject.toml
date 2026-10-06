@@ -2,20 +2,19 @@
 name = "bimanual-vla-challenge"
 version = "0.1.0"
 description = "Bimanual VLA table-setting: dual SO-101 arms in MuJoCo, OpenVINO inference on Intel Core Ultra"
-readme = "README.md"
 # LeRobot 0.6.x declares requires-python >=3.12 upstream; <3.14 because torch
 # (capped by lerobot at <2.12) does not ship cp314 wheels across all platforms yet.
 requires-python = ">=3.12,<3.14"
 
 dependencies = [
-    "lerobot>=0.6.1",   # brings torch, torchvision, gymnasium, numpy, huggingface-hub
+    "lerobot[dataset]>=0.6.1",   # brings torch, torchvision, gymnasium, numpy, huggingface-hub; [dataset] = LeRobotDataset (datasets, pyarrow, torchcodec)
     "mujoco>=3.12.0",
     "ikpy>=4.1.0",
     "imageio[ffmpeg]>=2.34",
 ]
 
 [project.optional-dependencies]
-# Mac / i7-8565U: sim dev, rollout generation, eval harness, early OpenVINO export testing.
+# Mac: sim dev, rollout generation, eval harness, early OpenVINO export testing.
 local = [
     "openvino>=2026.3.0",   # NOT openvino-dev: discontinued after 2024.6, ovc now ships in the runtime pkg
     "nncf>=3.3.0",
@@ -31,13 +30,6 @@ train = [
     "tensorboard>=2.18",
 ]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["sim", "policy", "inference", "eval", "openvino_bench"]
-
 # --- torch index routing -----------------------------------------------------
 # local  -> PyPI torch. On macOS that IS the CPU/MPS build; nothing to override.
 # train  -> CUDA build from PyTorch's own index, Linux only (the cloud GPU box).
@@ -51,6 +43,20 @@ explicit = true
 torch = [{ index = "pytorch-cu128", extra = "train", marker = "sys_platform == 'linux'" }]
 torchvision = [{ index = "pytorch-cu128", extra = "train", marker = "sys_platform == 'linux'" }]
 
+[dependency-groups]
+dev = [
+    "fast-simplification>=0.2.0",
+    "pytest>=9.1.1",
+    "trimesh>=5.1.1",
+]
+
 [tool.uv]
+# Not an installable package: scripts are run from the repo root with `uv run`.
+package = false
 # local and train must never resolve together: they pull different torch builds.
 conflicts = [[{ extra = "local" }, { extra = "train" }]]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["slow: IK reach searches (~1 min); skip with -m 'not slow'"]

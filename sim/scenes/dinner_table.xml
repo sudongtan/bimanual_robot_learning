@@ -1,0 +1,149 @@
+<!--
+  Dinner-table scene for dual SO-101 arms.
+  Built up step by step; see docs/building-a-mujoco-scene.md.
+
+  World frame: origin on the floor under the table centre, z up.
+  Arms will sit on the -y edge of the table, facing +y.
+-->
+<mujoco model="dinner_table">
+  <compiler angle="radian" autolimits="true"/>
+  <!-- Values from physicalai's tested dual-SO-101 config. Re-declared here
+       because an attached model's <option> is not inherited. -->
+  <option timestep="0.002" integrator="implicitfast" cone="elliptic" impratio="10"
+          solver="CG" iterations="50" ls_iterations="20" tolerance="1e-8"/>
+
+  <visual>
+    <headlight diffuse="0 0 0" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+    <quality shadowsize="4096"/>
+    <global offwidth="1280" offheight="960"/>
+    <!-- Near clip plane = znear x model extent. When unused items were parked 2.5 m away
+         (extent ~5 m) the default put it at 5 cm and clipped the jaws 3.5 cm in front of
+         each wrist camera (debug-log #8). 0.002 keeps it at a few mm for any layout. -->
+    <map znear="0.002"/>
+  </visual>
+
+  <default>
+    <!-- Pull-out bin parts: thin plastic walls, ordinary friction. -->
+    <default class="bin">
+      <geom type="box" condim="3" friction="0.8 0.005 0.0001" density="500"/>
+      <joint type="slide" axis="0 -1 0" range="0 0.18" damping="3" frictionloss="0.2" armature="0.01"/>
+      <site size="0.006" group="3" rgba="1 0 0 0.5"/>
+    </default>
+  </default>
+
+  <asset>
+    <model name="so101" file="../assets/so101/so101.xml"/>
+    <texture name="skybox" type="skybox" builtin="gradient" rgb1="0.53 0.81 0.98" rgb2="0.20 0.35 0.55"
+             width="512" height="3072"/>
+    <texture name="floor" type="2d" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
+             markrgb="0.8 0.8 0.8" width="300" height="300"/>
+    <material name="floor" texture="floor" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
+    <material name="tabletop" rgba="0.72 0.63 0.50 1"/>
+    <material name="tableleg" rgba="0.55 0.48 0.40 1"/>
+    <material name="plastic_bin" rgba="0.20 0.45 0.80 1"/>
+    <material name="metal_bin" rgba="0.55 0.57 0.60 1"/>
+    <material name="handle" rgba="0.15 0.15 0.15 1"/>
+  </asset>
+
+  <worldbody>
+    <!-- Only `top` casts shadows: each shadow-casting light adds a full drawing pass per
+         camera (scene-decisions D18). `key` still lights the scene. -->
+    <light name="key" pos="1 1 3.5" dir="-0.227 -0.268 -0.936" directional="false" cutoff="25"
+           exponent="1" diffuse="0.5 0.5 0.5" castshadow="false"/>
+    <light name="top" pos="0 0 3.5" dir="0 0 -1" directional="true" diffuse="0.6 0.6 0.6" castshadow="true"/>
+
+    <geom name="floor" type="plane" size="0 0 0.05" material="floor" condim="3"/>
+
+    <!-- Table: 0.70 x 0.60 m top, surface at z = 0.315 (box size is half-extents). -->
+    <body name="table" pos="0 0 0.30">
+      <geom name="table_top" type="box" size="0.35 0.30 0.015" material="tabletop" condim="3"
+            friction="0.9 0.005 0.0001"/>
+      <geom name="table_leg1" type="cylinder" size="0.015 0.1425" pos="-0.30 -0.26 -0.1575" material="tableleg"/>
+      <geom name="table_leg2" type="cylinder" size="0.015 0.1425" pos=" 0.30 -0.26 -0.1575" material="tableleg"/>
+      <geom name="table_leg3" type="cylinder" size="0.015 0.1425" pos="-0.30  0.26 -0.1575" material="tableleg"/>
+      <geom name="table_leg4" type="cylinder" size="0.015 0.1425" pos=" 0.30  0.26 -0.1575" material="tableleg"/>
+      <site name="table_center" pos="0 0 0.015" size="0.005" group="3"/>
+
+      <!-- plastic bin: pull-out drawer under the front edge. Closed = joint 0
+           (front panel flush with the table edge at y = -0.30); pulls out 0.18 m
+           toward -y. Interior 0.152 x 0.192 x 0.116 m. Child of the table, so it
+           never collides with the tabletop or legs (parent-child filter). -->
+      <body name="plastic_bin" pos="-0.1 -0.19 -0.085" childclass="bin">
+        <joint name="plastic_bin_slide"/>
+        <geom name="plastic_bin_floor" size="0.08 0.10 0.004" pos="0 0 -0.056" material="plastic_bin"/>
+        <geom name="plastic_bin_back"  size="0.08 0.004 0.06" pos="0 0.096 0" material="plastic_bin"/>
+        <geom name="plastic_bin_left"  size="0.004 0.10 0.06" pos="-0.076 0 0" material="plastic_bin"/>
+        <geom name="plastic_bin_right" size="0.004 0.10 0.06" pos="0.076 0 0" material="plastic_bin"/>
+        <geom name="plastic_bin_front" size="0.085 0.005 0.065" pos="0 -0.105 0" material="plastic_bin"/>
+        <!-- Handle: bar 8 cm wide, 1 cm thick, standing 5 cm off the panel, so a
+             gripper can reach the 5 cm gap behind it without hitting the table edge
+             (2.5 cm was unreachable for every arm when the bin is closed). -->
+        <geom name="plastic_bin_handle" size="0.04 0.005 0.005" pos="0 -0.165 0.03" material="handle"/>
+        <geom name="plastic_bin_post_l" size="0.004 0.025 0.004" pos="-0.035 -0.135 0.03" material="handle"/>
+        <geom name="plastic_bin_post_r" size="0.004 0.025 0.004" pos="0.035 -0.135 0.03" material="handle"/>
+        <site name="plastic_bin_handle" pos="0 -0.165 0.03"/>
+        <!-- Hook point: centre of the gap between panel and bar; a fingertip here pulls the bin open. -->
+        <site name="plastic_bin_hook" pos="0 -0.135 0.03"/>
+        <site name="plastic_bin_interior" type="box" size="0.072 0.092 0.056" pos="0 0 0.004"/>
+      </body>
+
+
+      <!-- metal bin: pull-out drawer under the front edge. Closed = joint 0
+           (front panel flush with the table edge at y = -0.30); pulls out 0.18 m
+           toward -y. Interior 0.152 x 0.192 x 0.116 m. Child of the table, so it
+           never collides with the tabletop or legs (parent-child filter). -->
+      <body name="metal_bin" pos="0.1 -0.19 -0.085" childclass="bin">
+        <joint name="metal_bin_slide"/>
+        <geom name="metal_bin_floor" size="0.08 0.10 0.004" pos="0 0 -0.056" material="metal_bin"/>
+        <geom name="metal_bin_back"  size="0.08 0.004 0.06" pos="0 0.096 0" material="metal_bin"/>
+        <geom name="metal_bin_left"  size="0.004 0.10 0.06" pos="-0.076 0 0" material="metal_bin"/>
+        <geom name="metal_bin_right" size="0.004 0.10 0.06" pos="0.076 0 0" material="metal_bin"/>
+        <geom name="metal_bin_front" size="0.085 0.005 0.065" pos="0 -0.105 0" material="metal_bin"/>
+        <!-- Handle: bar 8 cm wide, 1 cm thick, standing 5 cm off the panel, so a
+             gripper can reach the 5 cm gap behind it without hitting the table edge
+             (2.5 cm was unreachable for every arm when the bin is closed). -->
+        <geom name="metal_bin_handle" size="0.04 0.005 0.005" pos="0 -0.165 0.03" material="handle"/>
+        <geom name="metal_bin_post_l" size="0.004 0.025 0.004" pos="-0.035 -0.135 0.03" material="handle"/>
+        <geom name="metal_bin_post_r" size="0.004 0.025 0.004" pos="0.035 -0.135 0.03" material="handle"/>
+        <site name="metal_bin_handle" pos="0 -0.165 0.03"/>
+        <!-- Hook point: centre of the gap between panel and bar; a fingertip here pulls the bin open. -->
+        <site name="metal_bin_hook" pos="0 -0.135 0.03"/>
+        <site name="metal_bin_interior" type="box" size="0.072 0.092 0.056" pos="0 0 0.004"/>
+      </body>
+    </body>
+
+    <!-- Arms: arm A = left_, arm B = right_. Bases on the tabletop: mount z = 0.3174 so the base mesh bottom (2.4 mm below the body origin) rests on the 0.315 surface,
+         5 cm in from the front (-y) edge. Right arm rotated 180 deg about z, as in
+         physicalai's dual layout. -->
+    <frame name="left_mount" pos="-0.23 -0.25 0.3174">
+      <attach model="so101" body="base" prefix="left_"/>
+    </frame>
+    <frame name="right_mount" pos="0.23 -0.25 0.3174" quat="0 0 0 1">
+      <attach model="so101" body="base" prefix="right_"/>
+    </frame>
+
+    <!-- No waste items here: the environment (sim/waste_env.py) attaches the items an
+         episode needs with MjSpec on reset (scene-decisions D17). -->
+
+    <!-- Overview camera: behind and above the arms' side, looking across the table. -->
+    <camera name="overview" mode="targetbody" target="table" pos="0 -0.75 0.95" fovy="58"/>
+  </worldbody>
+
+  <!-- Home: generated by scripts/find_home_pose.py (defaults). Grippers ~12 cm above the table, between each base and the table
+       centre, angled down; no contacts. Right arm = left arm with shoulder_pan
+       and wrist_roll negated (its base is rotated 180 deg about z).
+       qpos order: plastic_bin_slide, metal_bin_slide, then left_{pan,lift,elbow,
+       wrist_flex,wrist_roll,gripper}, then right_.
+       Generated by scripts/find_home_pose.py — regenerate after changing joints.
+       ctrl order: arms only (12).
+       Bin joints come first because the bins are children of the table, which
+       precedes the arms in <worldbody>. -->
+  <keyframe>
+    <key name="home"
+         qpos="0 0 -1.062 -1.396 0.883 1.326 -2.195 0 1.062 -1.396 0.883 1.326 2.195 0"
+         ctrl="-1.062 -1.396 0.883 1.326 -2.195 0 1.062 -1.396 0.883 1.326 2.195 0"/>
+    <key name="bins_open"
+         qpos="0.18 0.18 -1.062 -1.396 0.883 1.326 -2.195 0 1.062 -1.396 0.883 1.326 2.195 0"
+         ctrl="-1.062 -1.396 0.883 1.326 -2.195 0 1.062 -1.396 0.883 1.326 2.195 0"/>
+  </keyframe>
+</mujoco>
