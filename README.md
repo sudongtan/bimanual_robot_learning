@@ -6,7 +6,7 @@ Build an end-to-end bimanual robot learning system in MuJoCo:
 
 Main progression:
 
-**Scripted expert → Behavioral Cloning → ACT → VLA → optional RL → OpenVINO deployment**
+**Scripted expert → Behavioral Cloning → ACT → VLA → diffusion -> optional RL → deployment**
 
 # Task
 
@@ -30,18 +30,19 @@ and send it to the right waste stream.
 
 | Waste stream | Destination |
 |---|---|
-| Plastic recycling | plastic bin (under-table pull-out drawer) |
-| Metal recycling | metal bin (under-table pull-out drawer) |
+| Plastic recycling | plastic bin (under-table pull-out bin) |
+| Metal recycling | metal bin (under-table pull-out bin) |
 | Food waste | food-waste container on the table |
 | Reuse (to wash) | "to wash" basket on the table |
 
 ## Tasks
 
 Arm A is the left arm, arm B the right arm. Implementation notes per task:
-[docs/tasks.md](docs/tasks.md).
+[docs/tasks_data.md](docs/tasks_data.md).
 
 | ID | Instruction | Success |
 |---|---|---|
+| T0 `t0_can_to_metal_bin` — T1 with only the can on the table (pipeline smoke test) | "Pick up the tomato soup can with arm A, open the metal bin with arm B, and put the can in the metal bin with arm A." | the can is in the metal bin |
 | T1 `can_to_metal_bin` | "Pick up the tomato soup can with arm A, open the metal bin with arm B, and put the can in the metal bin with arm A." | the can is in the metal bin |
 | T2 `cup_to_plastic_bin` | "Pick up the plastic cup with arm B, open the plastic bin with arm A, and put the cup in the plastic bin with arm B." | the cup is in the plastic bin |
 | T3 `handoff_can_to_metal_bin` | "Pick up the tomato soup can with arm A, hand it to arm B, and put it in the metal bin with arm B." | the can is in the metal bin, handed over without touching the table |
@@ -50,32 +51,19 @@ Arm A is the left arm, arm B the right arm. Implementation notes per task:
 | T6 `clear_the_table` | "Clear the table." | every item is in its correct destination |
 
 ## Phases
-
+Preparation
 1) Build scenes with randomization and the Bimanual MuJoCo Environment
-2) Generate Expert Demonstrations
+2) Generate Expert Demonstrations and prepare for evaluation
+
+Training and evaluation
 3) train and evaluate behaviour clone baseline
 4) train and evaluate ACT
 5) finetune and evaluate VLA
 6) Optional: train and evaluate diffusion policy
 7) Optional: reinforcement learning
-8) OpenVINO deployment
 
-## Steps
-1) T1 and phase 1, 2, 3, 4, 5, 8
-progress: 
-phase 2 is only half done. The smoke test showed that the expert works (50/50), but it didn't record anything. Phase 2 means generating demonstrations, a saved dataset, and none exists yet.
+Deployment 
+8) OpenVINO deployment — pending (deployment left out for now)
 
-Phase (your README)	T1 status
-1 Scene with randomization + environment	done for T1 (only the can's position and rotation are randomized)
-2 Expert demonstrations	expert done, recording not started
-3 BC, train + evaluate	not started
-4 ACT	not started
-5 VLA	not started
-8 OpenVINO	not started
-To finish phase 2: run the expert through the environment for about 50 seeds and save each successful episode in LeRobot's dataset format. That's what LeRobot's BC and ACT training reads. Each recorded step would contain:
-
-camera images;
-the 12 joint positions (the state);
-the 12 joint targets (the action);
-the task instruction;
-the seed and a success flag.
+## Progress
+1) Smoke test: T0 and phase 1, 2, 3, 4, 5 

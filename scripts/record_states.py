@@ -1,7 +1,7 @@
 """Phase 2, part 1: run the scripted expert and save states and actions — no rendering.
 
 One file per episode, data/raw/<task>/seed_<seed>.npz, holding everything needed to
-re-render any camera at any size later (scene-decisions D20):
+re-render any camera at any size later (design-decisions D20):
 
     qpos         (T, nq)  full simulator state at each control step, before the action
     state        (T, 12)  the arm joint positions = the policy's state input
@@ -39,10 +39,10 @@ def record(env: WasteSortEnv, expert, seed: int) -> dict:
     for k in range(n_steps):
         a = expert.act(k).astype(np.float32)
         qpos.append(env.data.qpos.copy())
-        state.append(obs["state"])
+        state.append(obs["agent_pos"])
         action.append(a)
         obs, reward, terminated, truncated, info = env.step(a)
-        if info["success"] and success_at is None:
+        if info["is_success"] and success_at is None:
             success_at = k + 1
         if success_at is not None and k + 1 - success_at >= SETTLE_AFTER_SUCCESS_S * CONTROL_HZ:
             break
@@ -55,7 +55,7 @@ def record(env: WasteSortEnv, expert, seed: int) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--task", default="can_to_metal_bin", choices=sorted(TASKS))
+    ap.add_argument("--task", default="t0_can_to_metal_bin", choices=sorted(TASKS))
     ap.add_argument("--seeds", type=int, nargs="+", required=True)
     ap.add_argument("--out", type=Path, default=Path("data/raw"))
     args = ap.parse_args()

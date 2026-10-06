@@ -3,8 +3,8 @@
 Task-agnostic: the expert comes from sim.experts.EXPERTS for --task.
 
 Usage:
-    uv run python scripts/smoke_test.py                                   # can_to_metal_bin, seeds 0-4
-    uv run python scripts/smoke_test.py --task can_to_metal_bin --seeds 0 1 2 --video-all
+    uv run python scripts/smoke_test.py                                   # t0_can_to_metal_bin, seeds 0-4
+    uv run python scripts/smoke_test.py --task t0_can_to_metal_bin --seeds 0 1 2 --video-all
 
 Videos (overview camera, 25 fps) go to outputs/smoke/<task>/seed_<n>.mp4.
 """
@@ -32,7 +32,7 @@ def run(env: WasteSortEnv, expert, seed: int, video: bool, log: bool) -> dict:
     disturbed = None  # did the grasped item move >1 cm before the grasp? (knocked, not grasped)
     # Run the plan, then give items 1.5 s to land; stop early on success.
     n_steps = min(env.max_steps, int((plan.duration + 1.5) * CONTROL_HZ))
-    info = {"success": False}
+    info = {"is_success": False}
     for k in range(n_steps):
         obs, reward, terminated, truncated, info = env.step(expert.act(k))
         phase = plan.phase(k / CONTROL_HZ)
@@ -51,14 +51,14 @@ def run(env: WasteSortEnv, expert, seed: int, video: bool, log: bool) -> dict:
     if video:
         (OUT / env.task_name).mkdir(parents=True, exist_ok=True)
         imageio.mimsave(OUT / env.task_name / f"seed_{seed}.mp4", frames, fps=CONTROL_HZ // 2)
-    return {"seed": seed, "success": info["success"], "disturbed": bool(disturbed), "time": info.get("time", 0.0),
+    return {"seed": seed, "success": info["is_success"], "disturbed": bool(disturbed), "time": info.get("time", 0.0),
             "items": {i: (start[i].round(3), env.item_pos(i).round(3)) for i in env.items},
             "bins": {b: round(env.bin_opening(b), 3) for b in BINS}}
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--task", default="can_to_metal_bin", choices=sorted(TASKS))
+    ap.add_argument("--task", default="t0_can_to_metal_bin", choices=sorted(TASKS))
     ap.add_argument("--seeds", type=int, nargs="*", default=[0, 1, 2, 3, 4])
     ap.add_argument("--video-all", action="store_true", help="save a video for every seed, not just the first")
     ap.add_argument("--quiet", action="store_true", help="no per-phase log")

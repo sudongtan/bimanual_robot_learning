@@ -6,9 +6,9 @@ are shared; a task only sets its instruction, which items it uses, how
 
 The scene file holds no items. On `reset` the environment attaches the
 task's items (YCB models in sim/assets/objects/ycb/) with MjSpec and compiles
-the result; one compiled model is kept per item set (scene-decisions D17).
+the result; one compiled model is kept per item set (design-decisions D17).
 
-    env = WasteSortEnv(task="can_to_metal_bin")
+    env = WasteSortEnv(task="t0_can_to_metal_bin")
     obs, info = env.reset(seed=3)
     obs, reward, terminated, truncated, info = env.step(action)
 
@@ -17,8 +17,11 @@ Action: 12 absolute joint position targets in radians, in actuator order
 wrist_roll, gripper) — the same quantity the SO-101 position servos take.
 Applied for one control step = 1/CONTROL_HZ s.
 
-Observation: {"state": the 12 arm joint positions} and, if `cameras` is
-given, {"images": {camera: HxWx3 uint8}}.
+Observation: {"agent_pos": the 12 arm joint positions} and, if `cameras` is
+given, {"pixels": {camera: HxWx3 uint8}}. Info: "is_success", plus the task
+name, instruction and time. Key names follow LeRobot's simulation
+environments, so LeRobot's evaluator maps them to `observation.state` and
+`observation.images.<camera>` (sim/lerobot_plugin).
 """
 
 import warnings
@@ -57,7 +60,7 @@ def build_model(items: tuple[str, ...], scene: Path = SCENE) -> mujoco.MjModel:
         child = mujoco.MjSpec.from_file(str(item_model_path(item)))
         spec.worldbody.add_frame().attach_body(child.body(item), ITEM_PREFIX, "")
     with warnings.catch_warnings():
-        # Expected: the attached arm's own solver settings lose to the scene's (scene-decisions D3).
+        # Expected: the attached arm's own solver settings lose to the scene's (design-decisions D3).
         warnings.filterwarnings("ignore", message="Attach conflict when attaching 'so101'")
         return spec.compile()
 
@@ -83,10 +86,11 @@ class Task:
     extra: dict = field(default_factory=dict)
 
 
-# --- task: arm A lifts the can, arm B opens the metal bin, arm A puts the can in ------------------
+# --- task T0: arm A lifts the can, arm B opens the metal bin, arm A puts the can in -------------
+# T0 is the simplest case of T1 (README): the same task with only the can on the table, used as
+# the pipeline smoke test (design-decisions D30). T1 itself (with other items) is not built yet.
 
-# Where arm A can grasp the can: gripper vertical, sliding in from the side. Closer to its base
-# (x < -0.16) the wrist camera mount hits the can or the arm hits itself.
+# Where arm A can grasp the can: gripper vertical, sliding in from the side (debug-log #13, #28).
 CAN_PATCH = dict(x=(-0.16, -0.06), y=(-0.10, -0.05))
 
 
@@ -106,7 +110,7 @@ def _can_in_metal_bin(env: "WasteSortEnv") -> bool:
 
 
 TASKS: dict[str, Task] = {
-    "can_to_metal_bin": Task(
+    "t0_can_to_metal_bin": Task(
         instruction="Pick up the tomato soup can with arm A, open the metal bin with arm B, "
                     "and put the can in the metal bin with arm A.",
         items=["tomato_soup_can"],
@@ -119,7 +123,7 @@ TASKS: dict[str, Task] = {
 class WasteSortEnv(gym.Env):
     metadata = {"render_modes": ["rgb_array"], "render_fps": CONTROL_HZ}
 
-    def __init__(self, task: str = "can_to_metal_bin", cameras: tuple[str, ...] = (),
+    def __init__(self, task: str = "t0_can_to_metal_bin", cameras: tuple[str, ...] = (),
                  image_size: tuple[int, int] = (224, 224), render_size: tuple[int, int] = (480, 640),
                  scene: Path = SCENE):
         self.task_name, self.task = task, TASKS[task]
@@ -133,11 +137,16 @@ class WasteSortEnv(gym.Env):
 
         lo, hi = self.model.actuator_ctrlrange[:, 0], self.model.actuator_ctrlrange[:, 1]
         self.action_space = gym.spaces.Box(lo.astype(np.float32), hi.astype(np.float32))
-        obs = {"state": gym.spaces.Box(-np.inf, np.inf, (self.model.nu,), np.float32)}
+        obs = {"agent_pos": gym.spaces.Box(-np.inf, np.inf, (self.model.nu,), np.float32)}
         if self.cameras:
-            obs["images"] = gym.spaces.Dict({c: gym.spaces.Box(0, 255, (*image_size, 3), np.uint8) for c in self.cameras})
+            obs["pixels"] = gym.spaces.Dict({c: gym.spaces.Box(0, 255, (*image_size, 3), np.uint8) for c in self.cameras})
         self.observation_space = gym.spaces.Dict(obs)
         self.steps = 0
+
+    @property
+    def task_description(self) -> str:
+        """The language instruction; LeRobot's evaluator reads it under this name."""
+        return self.task.instruction
 
     def _use_items(self, items: tuple[str, ...]) -> None:
         """Switch to the model containing exactly `items` (built once, then cached)."""
@@ -233,11 +242,11 @@ class WasteSortEnv(gym.Env):
         return r.render()
 
     def _obs(self) -> dict:
-        obs = {"state": self.data.qpos[self.arm_qadr].astype(np.float32)}
+        obs = {"agent_pos": self.data.qpos[self.arm_qadr].astype(np.float32)}
         if self.cameras:
-            obs["images"] = {c: self._render(c, self.image_size) for c in self.cameras}
+            obs["pixels"] = {c: self._render(c, self.image_size) for c in self.cameras}
         return obs
 
     def _info(self, success: bool = False) -> dict:
-        return {"task": self.task_name, "instruction": self.task.instruction, "success": success,
+        return {"task": self.task_name, "instruction": self.task.instruction, "is_success": success,
                 "time": self.steps / CONTROL_HZ}

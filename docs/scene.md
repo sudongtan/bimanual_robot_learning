@@ -1,10 +1,15 @@
-# Building the MuJoCo scene
+# The scene — general setup
 
-As of 2026-10-05, mujoco 3.12.0. **Verified** = run in this repo's environment;
-everything else cites its source.
+The simulated world every task runs in: table, arms, bins, items, cameras,
+physics. Last updated 2026-10-06, mujoco 3.12.0. **Verified** = run in this
+repo's environment; everything else cites its source. What each task does in
+this scene, and how its data is made: [tasks_data.md](tasks_data.md).
+References: "Dnn" = a decision in [design-decisions.md](design-decisions.md),
+"#nn" = an entry in [debug-log.md](debug-log.md).
 
-- **Part A — Our scene:** what is in it today, how to run and change it, what
-  we measured, what is still open, and how it was built.
+- **Part A — Our scene:** what is in it (A1), what it can do (A2), how it
+  was built (A3), what is still open (A4), and how to look at it, change it
+  and check it (A5).
 - **Part B — MuJoCo how-to:** the general techniques the scene uses, with the
   pitfalls we hit.
 
@@ -28,7 +33,7 @@ arms sit on the **−y** edge (the front); the overview camera looks from there.
 | Arm B | SO-101, prefix `right_`, rotated 180° about z | base (+0.23, −0.25, 0.3174) |
 | Plastic bin | pull-out drawer under the front edge, blue | x = −0.10 |
 | Metal bin | same, grey | x = +0.10 |
-| Waste items | **not in the scene file**: the environment attaches the items an episode needs on reset (scene-decisions D17) | placed by the task |
+| Waste items | **not in the scene file**: the environment attaches the items an episode needs on reset (design-decisions D17) | placed by the task |
 | Cameras | `overview` (aimed at the table), `left_wrist`, `right_wrist` | — |
 
 **Arms.** Model: physicalai's single-arm `so101.xml` (tuned box/sphere gripper
@@ -44,7 +49,7 @@ table edge at y = −0.30), 0.18 = fully out toward −y. The handle bar stands
 the bin open), `<name>_bin_interior` (box for "is it inside?" checks).
 
 **Items.** 20 YCB scans in [`sim/assets/objects/ycb/`](../sim/assets/objects/ycb/)
-(list in [docs/tasks.md](tasks.md)). On `reset`, `sim/waste_env.py` attaches the
+(list in [tasks_data.md](tasks_data.md), Part B). On `reset`, `sim/waste_env.py` attaches the
 task's items to the scene with MjSpec (`prefix="ycb_"` → body `ycb_<name>`,
 joint `ycb_<name>_free`), compiles, and keeps one compiled model per item set.
 Mass from the YCB paper (Table II). Collision: cans = exact cylinder;
@@ -53,7 +58,7 @@ everything else = the scan's convex hull.
 **State layout** (`qpos`): 2 bin slides (plastic, metal) → 12 arm joints
 (`left_` then `right_`: pan, lift, elbow, wrist_flex, wrist_roll, gripper) →
 7 values (x y z, qw qx qy qz) per attached item. The scene file alone: 14
-values; with the T1 can: 21. `ctrl` (12): the arm position-servo targets in
+values; with the T0 can: 21. `ctrl` (12): the arm position-servo targets in
 radians, same arm order.
 
 **Keyframes:** `home` (arms at rest, bins closed) and `bins_open` (same, all
@@ -71,13 +76,7 @@ CG solver — physicalai's tested values. Runs at **10.8× real time**.
 | [`sim/assets/so101/`](../sim/assets/so101/) | `so101.xml` (unmodified, from [physicalai](https://github.com/openvinotoolkit/physicalai) @ `d58921b`), meshes from [SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100), `SOURCE.md` | Apache 2.0 |
 | [`sim/assets/objects/ycb/`](../sim/assets/objects/ycb/) | one folder per item: `model.xml`, scan, 1024² texture, `SOURCE.md` (~40 MB total) | CC BY 4.0 |
 
-## A2. Run it, look at it, change it
-
-All commands — rendering, the viewer and its controls, watching an episode,
-the smoke test, recording demonstrations, adding objects, regenerating
-keyframes — are in **[how-to-run.md](how-to-run.md)**.
-
-## A3. Measured facts
+## A2. What it can do — measured facts
 
 All **verified** in this scene unless noted.
 
@@ -117,39 +116,17 @@ table. Pointing the gripper straight down fails at most bin targets — the arm
 is too short that close in front of its own base — so these motions leave the
 wrist angle free.
 
-**Grasping the can (arm A).** With the gripper pointing straight down, the
-fingertips reach only up to **z ≈ 0.40** — below the can's top (0.417) — and
-no tilted approach (15°–75°, any compass direction) reaches a grasp at all. So
-the gripper cannot come down onto the can from above. What works: lower the
-open, vertical gripper *beside* the can and slide it sideways so the can
-passes between the jaws (the jaws are thin plates, open at the sides), close,
-then lift with the wrist free to tilt. This works for can positions
-x −0.16 … −0.06, y −0.10 … −0.05; closer to the base (x < −0.16) the wrist
-camera mount hits the can or the arm hits itself.
+How arm A grasps the tomato can (a side slide-in, since the gripper cannot
+come down onto it from above) and the scripted expert's results are task
+details: [tasks_data.md](tasks_data.md), T0.
 
-**Scripted expert, task T1:** 50/50 seeds succeed. Fixes found by tracing
-failures: arm B parks beside its own base instead of returning home (at home
-its wrist camera was in arm A's drop path — 4/10 failures); arm A lifts over
-the can with the gripper closed and opens only beside it (opening on the way
-tipped the can over in 1/40 seeds). The metal bin opens to ≈ 0.16 m of its
-0.18 m — enough for the drop.
+**Rendering cost:** three 224×224 cameras took 143 ms per step at first;
+56 ms with one shadow-casting light, no parked items and floor reflections
+off (design-decisions D18, D21). Physics alone is 1.8 ms per control
+step, so datasets are recorded as states first and rendered afterwards in
+parallel (debug-log #19, design-decisions D17–D20; tasks_data.md A4).
 
-**Rendering cost:** with three 224×224 cameras in the observation a step takes
-≈ 0.15 s (≈ 7× slower than real time); without cameras the environment runs
-far faster than real time. Matters for dataset recording.
-
-## A4. Open questions
-
-- [ ] **Food-waste container** and **"to wash" basket** on the table — not built yet.
-- [ ] **Hollow items** (mug, bowl, cup) collide as solid hulls: fine for
-  pick-and-place, but they need hand-built or decomposed collision to hold
-  liquid (B8, B9).
-- [ ] YCB has **no drink can, water bottle or yogurt cup**; other sources in B6.
-- [ ] **Per-episode sampling** of which items go on the table — not written yet.
-- [ ] Image rendering is slow (≈ 0.15 s per step for three cameras) — check before recording datasets.
-- [ ] Rename the scene file (still `dinner_table.xml`)?
-
-## A5. How it was built
+## A3. How it was built
 
 One step at a time, each rendered and checked before the next.
 
@@ -161,12 +138,92 @@ One step at a time, each rendered and checked before the next.
 | 4 | First item: YCB tomato soup can | YCB tomato can as first item | keyframe without the can's values dropped it at the world origin (B9) |
 | 5 | All 20 YCB items, 3 on the table, 17 parked; `import_ycb.py` | every YCB item that fits; a different subset per episode; a basic layout for an expert smoke test | parked items pushed the camera near plane to 5 cm and clipped the jaws in the wrist views (B3) |
 | 6 | IK (`sim/ik.py`); handles 2.5 → 5 cm; middle bin removed, bins moved to x = ±0.10 | first task: arm A lifts the can, arm B opens the bin, arm A puts the can in; remove the middle bin and move the two bins to the middle | no arm could reach behind a 2.5 cm handle (an IK test also wrongly reported arm A could not drop into the metal bin at ±0.20 — it can, at 44° tilt; ±0.10 needs 15°); a too-long keyframe is a load error (a too-short one is silently padded) |
-| 7 | Environment `sim/waste_env.py`, scripted expert `sim/experts.py`, `scripts/smoke_test.py`, `tests/test_env.py` | build env + expert + smoke test for T1; README lists specific tasks | top-down grasp impossible (vertical reach ends below the can's top) → side slide-in; arm B at home blocked arm A's drop → park pose; opening the gripper en route tipped the can → open beside it |
-| 8 | Items attached per episode (no parked items); one shadow-casting light; arm-mesh simplification tested, not adopted; `record_states.py`, `render_dataset.py`, `view_episode.py`; `docs/debug-log.md`, `docs/scene-decisions.md` | D17 per-episode build, D18 one shadow light, D19 try simplified meshes, D20 record states then render, D23 keep shadows | rendering profiled (debug-log #19): the arms' meshes, not shadow-map size, are the cost |
+| 7 | Environment `sim/waste_env.py`, scripted expert `sim/experts.py`, `scripts/smoke_test.py`, `tests/test_env.py` | build env + expert + smoke test for the first task (then called T1, now T0 — design-decisions D30); README lists specific tasks | top-down grasp impossible (vertical reach ends below the can's top) → side slide-in; arm B at home blocked arm A's drop → park pose; opening the gripper en route tipped the can → open beside it |
+| 8 | Items attached per episode (no parked items); one shadow-casting light; arm-mesh simplification tested, not adopted; `record_states.py`, `render_dataset.py`, `view_episode.py`; `docs/debug-log.md`, `docs/design-decisions.md` | D17 per-episode build, D18 one shadow light, D19 try simplified meshes, D20 record states then render, D23 keep shadows | rendering profiled (debug-log #19): the arms' meshes, not shadow-map size, are the cost |
 
 Considered and not used: aloha_sim's drawer cabinet (a 24 cm countertop unit,
 not a bin); physicalai's hand-written two-arm files (attaching one arm twice
 keeps a single definition).
+
+## A4. Open questions
+
+- [ ] **Food-waste container** and **"to wash" basket** on the table — not built yet.
+- [ ] **Hollow items** (mug, bowl, cup) collide as solid hulls: fine for
+  pick-and-place, but they need hand-built or decomposed collision to hold
+  liquid (B8, B9).
+- [ ] YCB has **no drink can, water bottle or yogurt cup**; other sources in B6.
+- [ ] **Placing several items at once** (for T1 and later tasks, tasks_data.md)
+  — the environment can attach any item set, but no task places more than one
+  item yet.
+- [ ] Rename the scene file (still `dinner_table.xml`)?
+
+## A5. Using it: look at it, change it, check it
+
+Commands run from the repo root after `uv sync --extra local`
+([pipeline.md](pipeline.md), before you start). The scene file holds the
+table, bins, arms and cameras — **no items**: each episode attaches its own
+(tasks_data.md A1).
+
+**Render all cameras into one image** (prints model sizes, whether the state
+stays finite, and the contact count):
+
+```bash
+uv run python scripts/render_scene.py sim/scenes/dinner_table.xml outputs/renders/scene.png --keyframe home
+uv run python scripts/render_scene.py sim/scenes/dinner_table.xml outputs/renders/open.png --keyframe bins_open
+```
+
+**Interactive viewer:**
+
+```bash
+uv run python -m mujoco.viewer --mjcf=sim/scenes/dinner_table.xml
+```
+
+It opens with every joint at zero — **the arms start upright and collide**.
+First: left panel → **Simulation** → **Key** slider to `home` (0) →
+**Load key**. Then **Space** to run. To see a task's items, watch an episode
+instead (tasks_data.md A2).
+
+| To… | Do |
+|---|---|
+| Rotate / pan / zoom | left-drag / right-drag / scroll |
+| Run, pause, single step | **Space**, **→** |
+| Reset (back to all-zeros — load `home` again after) | **Backspace** |
+| Reload the XML after editing it | **Ctrl+L** |
+| Look through `overview` / `left_wrist` / `right_wrist` | **]** / **[**; **Esc** = free camera |
+| Show camera / light markers | **Q** / **Z** |
+| Show collision geometry / hide visual meshes | **3** / **2** |
+| Show contact points / forces | **C** / **F** |
+| Move an arm joint | right panel → **Control** sliders |
+| See bin positions | right panel → **Joint**: `plastic_bin_slide`, `metal_bin_slide` (0 closed, 0.18 open) |
+| Push or drag an object | double-click it, then **Ctrl** + right-drag |
+| Help overlay | **F1** |
+
+Keys from MuJoCo's [simulate shortcut reference](https://mujoco.readthedocs.io/en/stable/programming/samples.html#saSimulateShortcuts).
+
+**Change the scene:**
+
+| To… | Do |
+|---|---|
+| Add a YCB object | add its id to `ITEMS` in `scripts/import_ycb.py` (mass from YCB Table II, collision `cylinder` or `hull`), then `uv run python scripts/import_ycb.py <id>` (downloads into `outputs/ycb_cache/`, ~260 MB for all). Tasks refer to it by name; nothing to add to the scene file |
+| Change anything that adds, removes or moves a joint in the scene file | regenerate the keyframes: `uv run python scripts/find_home_pose.py` (checks contacts and a 3 s hold), paste the printed `<keyframe>` block over the scene's |
+| Move the arms or change the home pose | change the mounts, then `uv run python scripts/find_home_pose.py --target X Y Z` (left gripper target; the right arm is mirrored) |
+| Simplify the arms' display meshes (design-decisions D19, not adopted) | `uv run python scripts/simplify_meshes.py --keep 0.1` writes `sim/assets/so101/assets_visual/` |
+
+**Check it:** `uv run pytest tests/test_scene.py` (structure, physics
+settings, keyframes, bins, every item standing on the table, cameras, both
+arms reaching both bins). To test a modified copy:
+`SCENE_XML=sim/scenes/<copy>.xml uv run pytest tests/test_scene.py`.
+
+**Outputs:** `outputs/renders/` (scene images), `outputs/ycb_cache/` (YCB
+downloads); imported models in `sim/assets/objects/ycb/` (in git).
+
+**Messages that look like errors but are not:**
+
+| Message | Meaning |
+|---|---|
+| `WARNING: Attach conflict when attaching 'so101' … keeping parent value` | the arm file's solver settings lose to the scene's — intended (design-decisions D3) |
+| A new `MUJOCO_LOG.TXT` in the repo root | MuJoCo writes its warnings there; safe to delete |
+| Viewer: arms fold up and collide when you press Space | no keyframe loaded — load `home` first |
 
 ---
 

@@ -4,35 +4,31 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .uv_cache/
+.pytest_cache/
 
-# Datasets & checkpoints — never commit these (judges clone this repo)
-data/**
-!data/README.md
-policy/checkpoints/
+# Generated data and results — reproducible with the scripts, too large for git
+# data/: recorded states (data/raw/) and LeRobot datasets (data/lerobot/)
+# outputs/: renders, smoke-test videos, training checkpoints, evaluation results, YCB downloads
+data/
+outputs/
+
+# Model weights and exports, wherever they end up
 *.safetensors
 *.ckpt
 *.pt
 *.pth
-
-# Model artifacts
 *.onnx
 *.bin
 *.xml.data
-openvino_bench/ir/
 
-# Eval output: videos and rollout dumps
-eval/runs/
-eval/videos/
+# Logs and media
+*.log
+wandb/
+MUJOCO_LOG.TXT
 *.mp4
 *.gif
 
-# Training logs
-wandb/
-runs/
-outputs/
-*.log
-
-# Personal / untracked
+# Personal, not part of the project
 CLAUDE.md
 notes/
 

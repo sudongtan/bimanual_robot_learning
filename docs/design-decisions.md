@@ -1,11 +1,12 @@
-# Scene design decisions
+# Design decisions
 
-Every design decision about the MuJoCo scene, with what was chosen, the
-alternatives, why, who decided, and the evidence. "User" = decided by the
-project owner; "proposed" = chosen by the assistant while building, not
+Every design decision in the project — the MuJoCo scene (D1–D23), recording
+(D24–D27), evaluation, policies and training (D28–D29, D31–D33) and task scope (D30) — with what
+was chosen, the alternatives, why, who decided, and the evidence. "User" =
+decided by the project owner; "proposed" = chosen by the assistant while building, not
 explicitly approved. Bugs and investigations are in
 [debug-log.md](debug-log.md); the current state of the scene is in
-[building-a-mujoco-scene.md](building-a-mujoco-scene.md).
+[scene.md](scene.md).
 
 Status: **active**, **superseded** (by a later decision), or **open**.
 
@@ -38,7 +39,13 @@ Status: **active**, **superseded** (by a later decision), or **open**.
 | D24 | Dataset format: LeRobot, one frame per control step (50 fps) | active |
 | D25 | What a recorded episode contains | active |
 | D26 | Default cameras and image size for rendered datasets | **open** |
-| D27 | Training seeds 0–49; evaluation seeds kept separate | **open** (evaluation seeds not chosen) |
+| D27 | Seeds 0–199 recorded, 0–49 in T0's training set; evaluation seeds 1000–1049 | active |
+| D28 | Evaluate with LeRobot's evaluator; the environment registered as a LeRobot env | active |
+| D29 | BC baseline: own single-step network (`bc_mlp`) as a LeRobot policy plugin | active |
+| D30 | T0 = T1 with only the can on the table, as the pipeline smoke test; T1 keeps its other items | active |
+| D31 | VLA: fine-tune LeRobot's SmolVLA (`lerobot/smolvla_base`) | **open** (proposed) |
+| D32 | OpenVINO: convert the LeRobot policy network with `ov.convert_model`; pre/post-processing stays in LeRobot | **pending** (deployment left out for now) |
+| D33 | T0 training: BC and ACT, 20k steps, batch 8, on this Mac's GPU | active (proposed) |
 
 ---
 
@@ -72,7 +79,8 @@ Status: **active**, **superseded** (by a later decision), or **open**.
 - **Why:** same joints, ranges and servo parameters, but physicalai replaced
   the gripper's mesh collision (convex hulls, which fill the jaw faces) with
   boxes and fingertip spheres, and adds a wrist camera.
-- **Decided by:** proposed. The SO-101 itself is required by the challenge.
+- **Decided by:** this model — proposed; the SO-101 is the robot this project
+  is built around (plan of record).
 
 ### D5 Two arms by attaching one model twice
 - **Choice:** `<attach model="so101" body="base" prefix="left_|right_"/>`.
@@ -250,7 +258,9 @@ Status: **active**, **superseded** (by a later decision), or **open**.
 ### D23 Keep shadows
 - **Choice:** shadows stay on in rendered images.
 - **Alternatives:** shadows off (25.7 vs 80.6 ms/step).
-- **Why:** the challenge requires robustness to lighting changes; with
+- **Why:** a policy has to cope with lighting changes — lighting is one of the
+  factors that most reduces imitation-policy success when it changes (THE
+  COLOSSEUM, arXiv 2402.08191; Xie et al., arXiv 2307.03659) — and with
   shadows off, moving a light only changes brightness.
 - **Decided by:** user (2026-10-06).
 
@@ -265,9 +275,11 @@ Status: **active**, **superseded** (by a later decision), or **open**.
   must be at the rate the policy acts. ACT's real-robot data was also 50 Hz.
 - **Alternative:** a lower rate (LeRobot's real-robot guide records at 30 fps):
   smaller dataset, but the policy would then act at that rate too.
-- **Dependency:** `lerobot[dataset]` (adds `datasets`, pandas, pyarrow,
-  torchcodec). On this Mac torchcodec cannot load (no system FFmpeg) and
-  LeRobot falls back to pyav — works, but prints a long warning (debug-log #23).
+- **Dependency:** `lerobot[dataset,training]` (`dataset` adds `datasets`,
+  pandas, pyarrow, torchcodec; `training` adds `accelerate` and `wandb` for
+  `lerobot-train`, debug-log #29). On this Mac torchcodec cannot load (no
+  system FFmpeg) and LeRobot falls back to pyav — works, but prints a long
+  warning (debug-log #23).
 - **Decided by:** LeRobot format — plan of record; 50 fps — proposed.
 
 ### D25 What a recorded episode contains
@@ -289,7 +301,147 @@ Status: **active**, **superseded** (by a later decision), or **open**.
   setting (`render_dataset.py --cameras … --size …`), changeable without
   re-recording.
 
-### D27 Training seeds 0–49; evaluation seeds kept separate — open
-- **Current:** demonstrations recorded for seeds 0–49.
-- **Open:** which seeds are the fixed evaluation set (must not overlap the
-  training seeds).
+### D27 Seeds 0–199 recorded, 0–49 in T0's training set; evaluation seeds 1000–1049 — active
+- **Choice:** demonstrations are recorded from seeds 0–199 (200 episodes,
+  first 0–49; expanded 2026-10-06, by the user's decision, to cover the can
+  patch corner near arm A's base, debug-log #28). T0's training dataset uses
+  seeds 0–49 only: "since this is a smoke test, it does not need to be
+  perfect" (user, 2026-10-06); 50–199 stay recorded for later. Every policy (and
+  the expert) is evaluated on seeds 1000–1049, 50 episodes, the same for
+  every phase.
+- **Why:** must not overlap the training seeds; must be a consecutive range
+  (LeRobot's evaluator uses `--seed` + 0, 1, 2, …, D28); 50 episodes because
+  LeRobot's policy guide says "Use `n_episodes ≥ 50` per suite for stable
+  success-rate estimates" (huggingface.co/docs/lerobot/bring_your_own_policies).
+  Starting at 1000 leaves room to record more training seeds (200–999) later.
+- **Alternative:** 10 episodes (1000–1009) — faster, but one failure moves the
+  rate by 10 points.
+- **Decided by:** proposed (a setting with a conventional default; change it
+  here if needed — earlier results must then be re-run).
+
+### D28 Evaluate with LeRobot's evaluator — active
+- **Choice:** register the environment with LeRobot (`sim/lerobot_plugin`:
+  an `EnvConfig` named `waste_sort`, gym ids `gym_waste_sort/<task>`) and
+  evaluate trained policies with `lerobot-eval`. The scripted expert, which
+  is not a LeRobot policy, is evaluated by `scripts/evaluate_expert.py`
+  through LeRobot's `rollout()` (same env creation, seeding, stepping and
+  success reading) and reported in the same `eval_info.json` layout.
+- **Alternative:** our own evaluation script (full control, e.g. extra
+  metrics), rejected: it duplicates LeRobot, needs its own policy loading,
+  and `lerobot-train` can only evaluate during training through a registered
+  env.
+- **Consequences:**
+  - observation keys renamed to LeRobot's simulation names: `state` →
+    `agent_pos`, `images` → `pixels`; info `success` → `is_success`; the
+    env exposes `task_description` (the instruction).
+  - seeds are consecutive from a start seed (`--seed` in `lerobot-eval`,
+    `eval_policy(start_seed=…)`), so the evaluation seeds (D27) must be a
+    range.
+  - episodes still end at the first success step (debug-log #25 open point).
+  - environments are wrapped in LeRobot's `FreezeAfterEpisodeEnd`
+    (debug-log #26).
+- **Evidence:** `lerobot/scripts/lerobot_eval.py` (`rollout`, `eval_policy`
+  requires a `PreTrainedPolicy`), `lerobot/envs/configs.py` (`EnvConfig`,
+  `register_subclass`), `lerobot/configs/parser.py` (`load_plugin`,
+  `--env.discover_packages_path`), `lerobot/envs/utils.py`
+  (`preprocess_observation` key names) — LeRobot 0.6.1 as installed.
+- **Decided by:** user (option A, 2026-10-06).
+
+### D29 BC baseline: our own single-step network as a LeRobot policy plugin — active
+- **Choice:** `policies/lerobot_policy_bc_mlp/` — policy type `bc_mlp`:
+  each camera image through one shared ResNet-18 (ImageNet weights, frozen
+  batch-norm, global-average-pooled, 512 values per camera), concatenated
+  with the 12 joint positions, MLP 512–512 (ReLU, dropout 0.1) → the next
+  12-value action. L1 loss, mean/std normalisation, AdamW (lr 1e-4,
+  backbone 1e-5) — the same as LeRobot's ACT, so BC vs ACT isolates action
+  chunking and the CVAE. Installed as an editable path dependency; LeRobot
+  imports `lerobot_policy_*` distributions at startup.
+- **Alternative:** LeRobot's ACT with `chunk_size=1`, `use_vae=false` (no new
+  code).
+- **Evidence:** the ACT paper's BC-ConvMLP baseline (arXiv 2304.13705);
+  LeRobot "Adding a Policy" guide; `lerobot/policies/factory.py` (naming
+  conventions), `policies/act/` (encoder, loss, processors).
+- **Decided by:** user ("write a simple neural network to do BC",
+  2026-10-06); architecture details proposed.
+
+### D30 T0: T1 with only the can on the table, as the pipeline smoke test — active
+- **Choice:** T0 (`t0_can_to_metal_bin`) is the simplest case of T1: the same
+  instruction and success check, with only the tomato soup can on the table.
+  It is used to take the whole pipeline through once. T1
+  (`can_to_metal_bin`, README) is the real task: the same instruction with
+  other items on the table besides the can (user, 2026-10-06); built later.
+- **History:** at scene step 5 the user decided on several items per episode
+  ("a different subset per episode", scene.md A3), and the
+  basic scene had three items on the table (tomato can, tuna can, plastic
+  cup). When the first task was built (2026-10-05), the assistant left out all but
+  the can to get the first grasp and expert working — stated as a fact, not
+  raised as a decision, not recorded here. That task was then called T1. On
+  2026-10-06 the user decided: what was built is T0, a simplified T1 for the
+  pipeline smoke test; the original T1 is untouched. Code name, data folders
+  and tests were renamed from `can_to_metal_bin` to `t0_can_to_metal_bin`
+  (debug-log #32).
+- **Consequence:** a policy trained only on T0 never has to tell the target
+  from other items, and its instruction carries no information;
+  distractor-free training is the setting THE COLOSSEUM and LIBERO-Plus show
+  to be brittle. T0 results measure the pipeline, not those abilities.
+- **Open (for T1):** which other items, how many, how they are placed (with a
+  clearance around the can for the expert's grasp).
+- **Decided by:** user (2026-10-06).
+
+### D31 VLA: fine-tune LeRobot's SmolVLA — open (proposed)
+- **Proposal:** phase 5 fine-tunes `lerobot/smolvla_base` (450 M parameters;
+  LeRobot's own VLA, installed with the `smolvla` extra) on the task dataset
+  with `lerobot-train --policy.path=lerobot/smolvla_base`. Cameras are mapped
+  with `--rename_map`: overview → camera1, left_wrist → camera2,
+  right_wrist → camera3 (debug-log #34).
+- **Why:** it runs through the same LeRobot training and evaluation as BC and
+  ACT; LeRobot's guide recommends ≈ 50 episodes, the size of T0's dataset;
+  the joint state (12) and actions (12) fit its 32-value inputs.
+- **Alternatives:** LeRobot's pi0 / pi0.5 (`pi` extra; larger), GR00T, X-VLA.
+- **Cost:** the guide's example recipe, 20 k steps at batch 64, takes ≈ 4 h on
+  one A100. Shorter fine-tunes run on a Mac: Hugging Face's blog says SmolVLA
+  can "train on a single consumer GPU, or even a MacBook", and an M5 MacBook
+  example ran 3,000-step fine-tunes at batch 4–16 in ≈ 20–85 min each
+  (huggingface.co/Twu31/smolvla-cross-embodiment-mps). Steps and batch for
+  T0 to be chosen from a timed run on this Mac (debug-log #34).
+- **Evidence:** huggingface.co/docs/lerobot/smolvla;
+  `lerobot/policies/smolvla/configuration_smolvla.py`.
+- **Decided by:** proposed — which VLA is the user's choice.
+
+### D32 OpenVINO export: convert the LeRobot network with `ov.convert_model` — pending
+- **Status:** deployment (phase 8) is left out for now (user, 2026-10-06);
+  the code below exists and was tested on test checkpoints only. A Jetson
+  route (ONNX → TensorRT) was discussed and also left out.
+- **Choice:** `scripts/export_openvino.py` converts the policy network
+  (normalised state + images → normalised action chunk) with OpenVINO's
+  PyTorch route (`ov.convert_model`, `ov.save_model`); LeRobot's
+  pre/post-processors from the same checkpoint do the normalisation at run
+  time. `scripts/evaluate_openvino.py` runs the compiled model in the
+  simulator through the expert's evaluation loop (`scripts/evaluate_expert.py`).
+- **Alternative:** Intel's Physical AI Studio export (`physicalai export
+  --policy physicalai.policies.ACT --backend openvino`). It exports policies
+  trained with its own trainer (`.ckpt`); nothing in its documentation covers
+  LeRobot checkpoints, and the `physicalai` LeRobot plugin covers robot
+  hardware, not policies.
+- **Scope:** single-pass policies (bc_mlp, ACT) — tested on 2-episode test
+  checkpoints: exact at f32 (debug-log #33), 2.4–2.8× faster than PyTorch
+  on this Mac's CPU. SmolVLA (tokeniser, iterative sampling) is not handled.
+- **Evidence:** docs.openvino.ai "Converting PyTorch Models";
+  github.com/openvinotoolkit/physicalai (packages/);
+  skills.sh/open-edge-platform/physical-ai-studio (export workflow).
+- **Decided by:** proposed.
+
+### D33 T0 training: BC and ACT, 20k steps, batch 8, on this Mac's GPU — active (proposed)
+- **Choice:** `bc_mlp` and ACT each trained for 20,000 steps at batch 8
+  (≈ 4 passes over T0's 40,598 frames), `--policy.device=mps`, a checkpoint
+  every 5,000 steps, no evaluation during training; one after the other
+  (`scripts/train_policy.sh`, defaults = these settings). Other settings are
+  each policy's defaults (ACT: chunk 100, lr 1e-5; bc_mlp: D29).
+- **Why:** LeRobot's defaults (batch 8, 100k steps; its guide: "training
+  should take several hours") would take ≈ 4.7 h (bc_mlp) + 8.3 h (ACT) here —
+  measured 0.17 and 0.30 s/step at 224×224. T0 is a smoke test (D30), so a
+  fifth of that; the same budget for both keeps BC vs ACT fair. A run can be
+  continued with `--resume=true` if 20k is too short.
+- **Evidence:** timed 60-step runs (2026-10-06); LeRobot "Imitation Learning
+  on Real-World Robots" guide; `lerobot/configs/train.py` defaults.
+- **Decided by:** proposed (the user asked to train BC and ACT).

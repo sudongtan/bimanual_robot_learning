@@ -1,11 +1,11 @@
 """Open one episode's scene (with its items placed) in the MuJoCo viewer.
 
-The scene file holds no items (scene-decisions D17); this builds the model the
+The scene file holds no items (design-decisions D17); this builds the model the
 environment uses for a task, resets it with a seed, and opens the viewer on it.
 
 Usage:
-    uv run python scripts/view_episode.py --task can_to_metal_bin --seed 7     # any task in TASKS
-    uv run mjpython scripts/view_episode.py --task can_to_metal_bin --expert   # play the task's scripted expert
+    uv run python scripts/view_episode.py --task t0_can_to_metal_bin --seed 7     # any task in TASKS
+    uv run mjpython scripts/view_episode.py --task t0_can_to_metal_bin --expert   # play the task's scripted expert
 """
 
 import argparse
@@ -22,7 +22,7 @@ from sim.waste_env import CONTROL_HZ, TASKS, WasteSortEnv  # noqa: E402
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--task", default="can_to_metal_bin", choices=sorted(TASKS))
+    ap.add_argument("--task", default="t0_can_to_metal_bin", choices=sorted(TASKS))
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--expert", action="store_true", help="play the scripted expert (needs `mjpython` on macOS)")
     args = ap.parse_args()

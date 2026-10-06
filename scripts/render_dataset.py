@@ -2,14 +2,14 @@
 
 Reads data/raw/<task>/seed_*.npz (from record_states.py), rebuilds each episode's
 model, sets every saved state, renders the cameras, and writes a LeRobotDataset
-(scene-decisions D20). No physics is re-run, so images match the recorded
+(design-decisions D20). No physics is re-run, so images match the recorded
 states exactly. Rendering runs in parallel worker processes; the main process
 writes the dataset (encoding videos) in episode order.
 
 Usage:
     uv run python scripts/render_dataset.py                          # all 3 cameras, 224x224
     uv run python scripts/render_dataset.py --cameras overview left_wrist --size 96 96 --workers 6
-    uv run python scripts/render_dataset.py --no-reflections         # scene-decisions D21 (open)
+    uv run python scripts/render_dataset.py --no-reflections         # design-decisions D21 (open)
 
 Output: data/lerobot/<task>/ (LeRobot v3 format, fps = control rate).
 """
@@ -60,7 +60,7 @@ def _render_episode(path: str) -> tuple[str, dict]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--task", default="can_to_metal_bin")  # any task in sim.waste_env.TASKS with recorded episodes
+    ap.add_argument("--task", default="t0_can_to_metal_bin")  # any task in sim.waste_env.TASKS with recorded episodes
     ap.add_argument("--raw", type=Path, default=Path("data/raw"))
     ap.add_argument("--out", type=Path, default=Path("data/lerobot"))
     ap.add_argument("--cameras", nargs="+", default=["overview", "left_wrist", "right_wrist"])

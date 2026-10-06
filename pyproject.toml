@@ -7,10 +7,11 @@ description = "Bimanual VLA table-setting: dual SO-101 arms in MuJoCo, OpenVINO 
 requires-python = ">=3.12,<3.14"
 
 dependencies = [
-    "lerobot[dataset]>=0.6.1",   # brings torch, torchvision, gymnasium, numpy, huggingface-hub; [dataset] = LeRobotDataset (datasets, pyarrow, torchcodec)
+    "lerobot[dataset,training,smolvla]>=0.6.1",   # [training] = lerobot-train (accelerate, wandb); [smolvla] = the VLA (transformers); brings torch, torchvision, gymnasium, numpy, huggingface-hub; [dataset] = LeRobotDataset (datasets, pyarrow, torchcodec)
     "mujoco>=3.12.0",
     "ikpy>=4.1.0",
     "imageio[ffmpeg]>=2.34",
+    "lerobot_policy_bc_mlp",     # our BC baseline as a LeRobot policy plugin (policies/), --policy.type=bc_mlp
 ]
 
 [project.optional-dependencies]
@@ -40,6 +41,7 @@ url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
 [tool.uv.sources]
+lerobot_policy_bc_mlp = { path = "policies/lerobot_policy_bc_mlp", editable = true }
 torch = [{ index = "pytorch-cu128", extra = "train", marker = "sys_platform == 'linux'" }]
 torchvision = [{ index = "pytorch-cu128", extra = "train", marker = "sys_platform == 'linux'" }]
 

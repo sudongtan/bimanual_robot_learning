@@ -18,7 +18,7 @@ TIP = (0.012, 0.0, 0.003)              # between the fingertips, gripper-site fr
 CAN_AXIS = (-0.017, 0.0, 0.0)          # can axis when held: 3 mm clear of the fixed jaw
 CAN_H = 0.102                          # tomato soup can height (scan)
 GRASP_Z = 0.37                         # fingertip height when grasping: 4.7 cm below the can's top
-SLIDE = 0.085                          # start the slide-in this far beside the can's axis
+SLIDES = (0.085, 0.075, 0.065)         # start the slide-in this far beside the can's axis (first reachable)
 PARK_B = (0.26, -0.02, 0.45)           # arm B's fingertip while arm A drops the can
 
 
@@ -88,20 +88,30 @@ class CanToMetalBinExpert:
         if not self.ik or self.ik["left"].m is not self.env.model:
             self.ik = {"left": ArmIK(self.env.model, "left"), "right": ArmIK(self.env.model, "right")}
 
-    def _solve(self, side, qpos, prev, target, offset, direction=None):
-        """IK from the previous waypoint; fall back to restarts, keeping the solution nearest `prev`."""
+    def _solve(self, side, qpos, prev, target, offset, direction=None, jaw_axis=None):
+        """IK from the previous waypoint; fall back to restarts, keeping the solution nearest `prev`.
+        With `jaw_axis` (world vector), only solutions whose gripper-site x axis (the direction the
+        jaws open) points the same way are accepted: the same position and pointing direction can
+        also be reached with the wrist rolled half a turn, which turns the wrist camera toward the
+        item (seed 184, debug-log #28)."""
         ik = self.ik[side]
+
+        def ok(q, ep, er):
+            if not (ep < 2e-3 and er < np.radians(3)):
+                return False
+            return jaw_axis is None or self._site_axes(side, qpos, q)[:, 0] @ jaw_axis > np.cos(np.radians(20))
+
         seed = qpos.copy()
         seed[ik.qadr] = prev
         q, ep, er = ik.solve(seed, target, offset, direction)
-        if ep < 2e-3 and er < np.radians(3):
+        if ok(q, ep, er):
             return q
         rng = np.random.default_rng(0)
         best = None
         for _ in range(30):
             seed[ik.qadr] = rng.uniform(ik.lo, ik.hi)
             q, ep, er = ik.solve(seed, target, offset, direction)
-            if ep < 2e-3 and er < np.radians(3):
+            if ok(q, ep, er):
                 dist = np.abs(q - prev).sum()
                 if best is None or dist < best[0]:
                     best = (dist, q)
@@ -137,19 +147,25 @@ class CanToMetalBinExpert:
         can = env.item_pos(self.grasped_item)
         grasp_pt = np.array([can[0], can[1], GRASP_Z])
         grasp = self._solve(A, qpos, qa, grasp_pt, CAN_AXIS, DOWN)
-        slide = self._site_axes(A, qpos, grasp)[:, 1] * [1, 1, 0]
+        grasp_axes = self._site_axes(A, qpos, grasp)
+        slide = grasp_axes[:, 1] * [1, 1, 0]
         slide /= np.linalg.norm(slide)
-        for sign in (-1, 1):
+        # Prefer sliding in from sign -1 at any distance before trying the other side: from +1 the
+        # wrist camera housing leads and hits the can (seeds 1004, 1009 knocked it over, debug-log
+        # #28). Near arm A's base the -1 start at 8.5 cm is just out of reach; a shorter one is not.
+        starts = [(sign, dist) for sign in (-1, 1) for dist in SLIDES]
+        for i, (sign, dist) in enumerate(starts):
             try:
-                beside = self._solve(A, qpos, grasp, grasp_pt + sign * SLIDE * slide, CAN_AXIS, DOWN)
-                hover = self._solve(A, qpos, beside, grasp_pt + sign * SLIDE * slide + [0, 0, 0.03], CAN_AXIS, DOWN)
+                beside = self._solve(A, qpos, grasp, grasp_pt + sign * dist * slide, CAN_AXIS, DOWN, grasp_axes[:, 0])
+                hover = self._solve(A, qpos, beside, grasp_pt + sign * dist * slide + [0, 0, 0.03], CAN_AXIS, DOWN,
+                                    grasp_axes[:, 0])
                 break
             except IKFailed:
-                if sign == 1:
+                if i == len(starts) - 1:
                     raise
         # Clear the can first, gripper closed: at home the jaws hang just above the can's top, and
         # opening them on the way swept the moving jaw through the can (seed 25 knocked it over).
-        hover_pt = grasp_pt + sign * SLIDE * slide + [0, 0, 0.03]
+        hover_pt = grasp_pt + sign * dist * slide + [0, 0, 0.03]
         clear = self._solve(A, qpos, hover, hover_pt + [0, 0, 0.08], TIP)
         plan.move(A, clear, GRIP_CLOSED, 1.0, "up and over, closed")
         plan.move(A, hover, GRIP_CLOSED, 0.8, "beside the can")
@@ -202,7 +218,7 @@ class CanToMetalBinExpert:
 # One scripted expert per task. Every expert has: reset() -> Plan, act(step) -> 12-value action,
 # and the attributes `grasped_item` and `grasp_phase` (see CanToMetalBinExpert).
 EXPERTS = {
-    "can_to_metal_bin": CanToMetalBinExpert,
+    "t0_can_to_metal_bin": CanToMetalBinExpert,
 }
 
 

@@ -1,4 +1,4 @@
-"""Write simplified copies of the SO-101 visual meshes (scene-decisions D19).
+"""Write simplified copies of the SO-101 visual meshes (design-decisions D19).
 
 Reads sim/assets/so101/assets/*.stl (originals, unchanged) and writes
 quadric-decimated copies to sim/assets/so101/assets_visual/. The arm model
