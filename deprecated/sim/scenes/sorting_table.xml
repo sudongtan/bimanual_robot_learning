@@ -1,0 +1,116 @@
+<!--
+  Sorting table: two SO-101 arms facing each other across a small table with a
+  metal drawer (front, -y) and a plastic drawer (back, +y).
+
+  Frame: table centre at x = y = 0, +x toward the right arm, +y toward the back,
+  tabletop at z = 0.315 m. Values follow README section 2.2.
+
+  Approximations (no meshes in the repo yet):
+    - can    = small metal can, 4.0 cm wide x 6.0 cm tall, 80 g (the 6.8 x 10.2 cm,
+               349 g soup can could not be picked reliably by the SO-101 gripper)
+    - block  = 3 x 3 x 5 cm box
+    - banana = capsule, lemon = ellipsoid (distractors)
+-->
+<mujoco model="sorting_table">
+  <compiler angle="radian" autolimits="true"/>
+  <option integrator="implicitfast" timestep="0.002" cone="elliptic" impratio="10"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+    <global azimuth="120" elevation="-30" offwidth="1280" offheight="960"/>
+  </visual>
+
+  <asset>
+    <model name="so101" file="../assets/so101/so101.xml"/>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+    <texture type="2d" name="floor" builtin="checker" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3" width="300" height="300"/>
+    <material name="floor" texture="floor" texuniform="true" texrepeat="5 5"/>
+    <material name="wood" rgba="0.62 0.47 0.32 1"/>
+    <material name="metal" rgba="0.55 0.57 0.6 1" specular="0.8" shininess="0.8"/>
+    <material name="plastic" rgba="0.2 0.45 0.85 1"/>
+    <material name="handle" rgba="0.15 0.15 0.15 1"/>
+  </asset>
+
+  <default>
+    <default class="drawer">
+      <joint type="slide" range="0 0.12" damping="5" frictionloss="1.5" armature="0.05"/>
+      <geom type="box" density="600"/>
+      <default class="handle">
+        <geom type="capsule" size="0.006" material="handle"/>
+      </default>
+    </default>
+  </default>
+
+  <worldbody>
+    <light pos="0 0 2" dir="0 0 -1" directional="true"/>
+    <geom name="floor" type="plane" size="0 0 0.05" material="floor"/>
+
+    <camera name="overview" pos="0 0 1.25" fovy="45"/>
+
+    <!-- Table: 0.50 x 0.46 m, top at z = 0.315 -->
+    <body name="table">
+      <geom name="tabletop" type="box" pos="0 0 0.3025" size="0.25 0.23 0.0125" material="wood"/>
+      <geom name="leg_fl" type="box" pos="-0.235 -0.215 0.145" size="0.015 0.015 0.145" material="wood"/>
+      <geom name="leg_fr" type="box" pos="0.235 -0.215 0.145" size="0.015 0.015 0.145" material="wood"/>
+      <geom name="leg_bl" type="box" pos="-0.235 0.215 0.145" size="0.015 0.015 0.145" material="wood"/>
+      <geom name="leg_br" type="box" pos="0.235 0.215 0.145" size="0.015 0.015 0.145" material="wood"/>
+    </body>
+
+    <!-- Arms on the centre line, 5 cm in from the short edges, facing each other. -->
+    <frame name="left_mount" pos="-0.20 0 0.315">
+      <attach model="so101" body="base" prefix="left/"/>
+    </frame>
+    <frame name="right_mount" pos="0.20 0 0.315" euler="0 0 3.14159265">
+      <attach model="so101" body="base" prefix="right/"/>
+    </frame>
+
+    <!-- Plastic drawer (back, +y). Interior 15 x 19 x 12 cm centred at (0, 0.12, 0.22) when closed. -->
+    <body name="plastic_drawer" childclass="drawer">
+      <joint name="plastic_drawer" axis="0 1 0"/>
+      <geom name="plastic_floor" pos="0 0.12 0.156" size="0.083 0.103 0.004" material="plastic"/>
+      <geom name="plastic_wall_l" pos="-0.079 0.12 0.22" size="0.004 0.103 0.06" material="plastic"/>
+      <geom name="plastic_wall_r" pos="0.079 0.12 0.22" size="0.004 0.103 0.06" material="plastic"/>
+      <geom name="plastic_wall_back" pos="0 0.021 0.22" size="0.075 0.004 0.06" material="plastic"/>
+      <geom name="plastic_wall_front" pos="0 0.2225 0.216" size="0.083 0.0075 0.064" material="plastic"/>
+      <geom name="plastic_front_plate" pos="0 0.2390 0.2335" size="0.10 0.0075 0.0815" material="plastic"/>
+      <!-- Goalpost handle: bar at (0, 0.285, 0.395), 8 cm above the tabletop, 5.5 cm out from the front. -->
+      <geom class="handle" fromto="-0.045 0.2465 0.30 -0.045 0.285 0.30"/>
+      <geom class="handle" fromto="0.045 0.2465 0.30 0.045 0.285 0.30"/>
+      <geom class="handle" fromto="-0.045 0.285 0.30 -0.045 0.285 0.395"/>
+      <geom class="handle" fromto="0.045 0.285 0.30 0.045 0.285 0.395"/>
+      <geom name="plastic_handle" class="handle" size="0.008" fromto="-0.045 0.285 0.395 0.045 0.285 0.395"/>
+      <site name="plastic_interior" type="box" pos="0 0.12 0.22" size="0.075 0.095 0.06" rgba="0 0 0 0"/>
+    </body>
+
+    <!-- Metal drawer (front, -y): mirror image of the plastic drawer. -->
+    <body name="metal_drawer" childclass="drawer">
+      <joint name="metal_drawer" axis="0 -1 0"/>
+      <geom name="metal_floor" pos="0 -0.12 0.156" size="0.083 0.103 0.004" material="metal"/>
+      <geom name="metal_wall_l" pos="-0.079 -0.12 0.22" size="0.004 0.103 0.06" material="metal"/>
+      <geom name="metal_wall_r" pos="0.079 -0.12 0.22" size="0.004 0.103 0.06" material="metal"/>
+      <geom name="metal_wall_back" pos="0 -0.021 0.22" size="0.075 0.004 0.06" material="metal"/>
+      <geom name="metal_wall_front" pos="0 -0.2225 0.216" size="0.083 0.0075 0.064" material="metal"/>
+      <geom name="metal_front_plate" pos="0 -0.2390 0.2335" size="0.10 0.0075 0.0815" material="metal"/>
+      <geom class="handle" fromto="-0.045 -0.2465 0.30 -0.045 -0.285 0.30"/>
+      <geom class="handle" fromto="0.045 -0.2465 0.30 0.045 -0.285 0.30"/>
+      <geom class="handle" fromto="-0.045 -0.285 0.30 -0.045 -0.285 0.395"/>
+      <geom class="handle" fromto="0.045 -0.285 0.30 0.045 -0.285 0.395"/>
+      <geom name="metal_handle" class="handle" size="0.008" fromto="-0.045 -0.285 0.395 0.045 -0.285 0.395"/>
+      <site name="metal_interior" type="box" pos="0 -0.12 0.22" size="0.075 0.095 0.06" rgba="0 0 0 0"/>
+    </body>
+
+    <!-- Items. Positions are placeholders; tasks set them per episode (README section 2.1 D). -->
+    <body name="can" pos="-0.12 0.08 0.346">
+      <freejoint name="can"/>
+      <geom name="can" type="cylinder" size="0.02 0.03" mass="0.08" material="metal"/>
+    </body>
+    <body name="block" pos="0.12 -0.08 0.34">
+      <freejoint name="block"/>
+      <geom name="block" type="box" size="0.015 0.015 0.025" mass="0.009" rgba="0.95 0.75 0.1 1"/>
+    </body>
+    <body name="banana" pos="0.05 -0.15 0.332">
+      <freejoint name="banana"/>
+      <geom name="banana" type="capsule" size="0.016 0.075" euler="0 1.5708 0" mass="0.12" rgba="0.95 0.9 0.3 1"/>
+    </body>
+  </worldbody>
+</mujoco>

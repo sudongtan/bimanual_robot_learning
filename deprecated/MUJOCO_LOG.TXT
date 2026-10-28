@@ -1,0 +1,20 @@
+WARNING Thu Oct 22 14:51:47 2026: Attach conflict when attaching 'so101' to 'sorting_table', policy is 'warning'
+timestep: parent has 0.002, child has 0.005, keeping parent value
+iterations: parent has 100 (default), child has 10, keeping parent value
+ls_iterations: parent has 50 (default), child has 20, keeping parent value
+
+WARNING Thu Oct 22 14:51:47 2026: Attach conflict when attaching 'so101' to 'sorting_table', policy is 'warning'
+timestep: parent has 0.002, child has 0.005, keeping parent value
+iterations: parent has 100 (default), child has 10, keeping parent value
+ls_iterations: parent has 50 (default), child has 20, keeping parent value
+
+WARNING Thu Oct 22 14:52:12 2026: Attach conflict when attaching 'so101' to 'sorting_table', policy is 'warning'
+timestep: parent has 0.002, child has 0.005, keeping parent value
+iterations: parent has 100 (default), child has 10, keeping parent value
+ls_iterations: parent has 50 (default), child has 20, keeping parent value
+
+WARNING Thu Oct 22 14:52:12 2026: Attach conflict when attaching 'so101' to 'sorting_table', policy is 'warning'
+timestep: parent has 0.002, child has 0.005, keeping parent value
+iterations: parent has 100 (default), child has 10, keeping parent value
+ls_iterations: parent has 50 (default), child has 20, keeping parent value
+

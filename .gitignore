@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Environments and tool caches
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Training runs (LeRobot writes to outputs/ by default) and experiment trackers
+outputs/
+wandb/
+
+# OS and editors
+.DS_Store
+.vscode/
+.idea/

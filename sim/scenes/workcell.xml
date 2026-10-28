@@ -1,0 +1,121 @@
+<!--
+  Workcell for the hackathon task set (1tasks_scene.md): two SO-101 arms facing each other across a
+  table, a one-drawer cabinet on the tabletop at the back centre, and a 4 cm cube.
+  (A 4 x 4 x 6 cm block was tried for the hand-off: held at the 20° grasp tilt it tipped
+  over when put down, breaking S2-S4 and T2.)
+
+  Frame: table centre at x = y = 0, +x toward arm B (right), +y toward the back (cabinet),
+  tabletop at z = 0.315 m. Arm A (left) base at (-0.20, 0), arm B (right) at (+0.20, 0).
+
+  The drawer pulls out toward the table centre (-y). Its handle and its open interior sit
+  about 0.2 m from both arm bases, inside both arms' comfortable reach. It is tray-like
+  (3.5 cm walls, 4.6 cm front) with the handle 5.5 cm out, so an open gripper fits around the cube and
+  the bar without touching the drawer or the cabinet.
+-->
+<mujoco model="workcell">
+  <compiler angle="radian" autolimits="true"/>
+  <option integrator="implicitfast" timestep="0.002" cone="elliptic" impratio="10"/>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0"/>
+    <global azimuth="120" elevation="-30" offwidth="1280" offheight="960"/>
+  </visual>
+
+  <asset>
+    <model name="so101" file="../assets/so101/so101.xml"/>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
+    <texture type="2d" name="floor" builtin="checker" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3" width="300" height="300"/>
+    <material name="floor" texture="floor" texuniform="true" texrepeat="5 5"/>
+    <material name="wood" rgba="0.62 0.47 0.32 1"/>
+    <material name="cabinet" rgba="0.85 0.85 0.82 1"/>
+    <material name="drawer" rgba="0.55 0.62 0.7 1"/>
+    <material name="handle" rgba="0.15 0.15 0.15 1"/>
+  </asset>
+
+  <default>
+    <default class="cabinet">
+      <geom type="box" material="cabinet"/>
+    </default>
+    <default class="drawer">
+      <joint type="slide" range="0 0.14" damping="5" frictionloss="1.5" armature="0.05"/>
+      <geom type="box" density="600" material="drawer"/>
+      <default class="handle">
+        <geom type="capsule" size="0.006" material="handle"/>
+      </default>
+    </default>
+  </default>
+
+  <worldbody>
+    <light pos="0 0 2" dir="0 0 -1" directional="true"/>
+    <geom name="floor" type="plane" size="0 0 0.05" material="floor"/>
+
+    <camera name="overview" pos="0 0 1.25" fovy="45"/>
+
+    <!-- Table: 0.60 x 0.50 m, top at z = 0.315 -->
+    <body name="table">
+      <geom name="tabletop" type="box" pos="0 0 0.3025" size="0.30 0.25 0.0125" material="wood"/>
+      <geom name="leg_fl" type="box" pos="-0.285 -0.235 0.145" size="0.015 0.015 0.145" material="wood"/>
+      <geom name="leg_fr" type="box" pos="0.285 -0.235 0.145" size="0.015 0.015 0.145" material="wood"/>
+      <geom name="leg_bl" type="box" pos="-0.285 0.235 0.145" size="0.015 0.015 0.145" material="wood"/>
+      <geom name="leg_br" type="box" pos="0.285 0.235 0.145" size="0.015 0.015 0.145" material="wood"/>
+    </body>
+
+    <!-- Arms on the centre line, facing each other, 0.40 m apart. -->
+    <frame name="arm_a_mount" pos="-0.20 0 0.315">
+      <attach model="so101" body="base" prefix="left/"/>
+    </frame>
+    <frame name="arm_b_mount" pos="0.20 0 0.315" euler="0 0 3.14159265">
+      <attach model="so101" body="base" prefix="right/"/>
+    </frame>
+
+    <!-- Cabinet: 22 x 16 x 11 cm, open at the front (-y), on the tabletop at the back centre. -->
+    <body name="cabinet">
+      <geom name="cabinet_left" class="cabinet" pos="-0.105 0.16 0.37" size="0.005 0.08 0.055"/>
+      <geom name="cabinet_right" class="cabinet" pos="0.105 0.16 0.37" size="0.005 0.08 0.055"/>
+      <geom name="cabinet_back" class="cabinet" pos="0 0.235 0.37" size="0.11 0.005 0.055"/>
+      <!-- Top recessed 5 cm from the front, so a wrist reaching into the open drawer clears it. -->
+      <geom name="cabinet_top" class="cabinet" pos="0 0.185 0.42" size="0.11 0.055 0.005"/>
+    </body>
+
+    <!-- Drawer: interior 17.8 x 12.4 x 3.5 cm, pulls 14 cm toward -y (end stop). Handle bar 5.5 cm in front. -->
+    <body name="drawer" childclass="drawer">
+      <joint name="drawer" axis="0 -1 0"/>
+      <geom name="drawer_floor" pos="0 0.157 0.322" size="0.095 0.069 0.004"/>
+      <geom name="drawer_wall_l" pos="-0.092 0.157 0.3435" size="0.003 0.069 0.0175"/>
+      <geom name="drawer_wall_r" pos="0.092 0.157 0.3435" size="0.003 0.069 0.0175"/>
+      <geom name="drawer_wall_back" pos="0 0.2225 0.3435" size="0.089 0.0035 0.0175"/>
+      <geom name="drawer_front" pos="0 0.085 0.341" size="0.098 0.005 0.023"/>
+      <geom class="handle" fromto="-0.04 0.08 0.355 -0.04 0.025 0.355"/>
+      <geom class="handle" fromto="0.04 0.08 0.355 0.04 0.025 0.355"/>
+      <geom name="handle" class="handle" size="0.007" fromto="-0.04 0.025 0.355 0.04 0.025 0.355"/>
+      <site name="drawer_interior" type="box" pos="0 0.157 0.3435" size="0.089 0.062 0.0175" rgba="0 0 0 0"/>
+    </body>
+
+    <!-- Bar for T1: 12 x 3 x 3 cm, gripped near either end so two grippers fit on it. -->
+    <body name="bar" pos="1.6 1.0 0.016">
+      <freejoint name="bar"/>
+      <geom name="bar" type="box" size="0.06 0.015 0.015" mass="0.03" rgba="0.2 0.45 0.85 1"/>
+    </body>
+
+    <!-- Item: 4 cm cube. Tasks place it per episode. -->
+    <body name="cube" pos="0 -0.12 0.336">
+      <freejoint name="cube"/>
+      <geom name="cube" type="box" size="0.02 0.02 0.02" mass="0.03" rgba="0.85 0.2 0.15 1"/>
+    </body>
+
+    <!-- Distractors (Randomisation in 1tasks_scene.md): round shapes, nothing cube- or bar-like
+         (RoboTwin's rule). Parked on the floor; sim/randomize.py puts 0-2 of them on the table. -->
+    <body name="puck" pos="1.0 1.4 0.007">
+      <freejoint name="puck"/>
+      <geom name="puck" type="cylinder" size="0.025 0.006" mass="0.02" rgba="0.5 0.5 0.5 1"/>
+    </body>
+    <body name="cylinder" pos="1.3 1.4 0.021">
+      <freejoint name="cylinder"/>
+      <geom name="cylinder" type="cylinder" size="0.018 0.02" mass="0.03" rgba="0.5 0.5 0.5 1"/>
+    </body>
+    <body name="pebble" pos="1.6 1.4 0.013">
+      <freejoint name="pebble"/>
+      <geom name="pebble" type="ellipsoid" size="0.024 0.018 0.012" mass="0.02" rgba="0.5 0.5 0.5 1"/>
+    </body>
+  </worldbody>
+</mujoco>
