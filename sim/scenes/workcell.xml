@@ -1,16 +1,15 @@
 <!--
   Workcell for the hackathon task set (1tasks_scene.md): two SO-101 arms facing each other across a
   table, a one-drawer cabinet on the tabletop at the back centre, and a 4 cm cube.
-  (A 4 x 4 x 6 cm block was tried for the hand-off: held at the 20° grasp tilt it tipped
-  over when put down, breaking S2-S4 and T2.)
+  (A 4 x 4 x 6 cm block tipped over when put down at the 20° grasp tilt.)
 
   Frame: table centre at x = y = 0, +x toward arm B (right), +y toward the back (cabinet),
   tabletop at z = 0.315 m. Arm A (left) base at (-0.20, 0), arm B (right) at (+0.20, 0).
 
   The drawer pulls out toward the table centre (-y). Its handle and its open interior sit
   about 0.2 m from both arm bases, inside both arms' comfortable reach. It is tray-like
-  (3.5 cm walls, 4.6 cm front) with the handle 5.5 cm out, so an open gripper fits around the cube and
-  the bar without touching the drawer or the cabinet.
+  (3.5 cm walls, 4.6 cm front) with the handle 5.5 cm out, so an open gripper fits around the cube
+  without touching the drawer or the cabinet.
 -->
 <mujoco model="workcell">
   <compiler angle="radian" autolimits="true"/>
@@ -49,7 +48,9 @@
     <light pos="0 0 2" dir="0 0 -1" directional="true"/>
     <geom name="floor" type="plane" size="0 0 0.05" material="floor"/>
 
-    <camera name="overview" pos="0 0 1.25" fovy="45"/>
+    <!-- 30° vertical field of view: at 640 x 480 the frame is 67 x 50 cm at the tabletop, the table
+         plus the distractor zones (45° showed 103 x 78 cm, mostly floor, and the cube ~8 px at 224). -->
+    <camera name="overview" pos="0 0 1.25" fovy="30"/>
 
     <!-- Table: 0.60 x 0.50 m, top at z = 0.315 -->
     <body name="table">
@@ -91,19 +92,13 @@
       <site name="drawer_interior" type="box" pos="0 0.157 0.3435" size="0.089 0.062 0.0175" rgba="0 0 0 0"/>
     </body>
 
-    <!-- Bar for T1: 12 x 3 x 3 cm, gripped near either end so two grippers fit on it. -->
-    <body name="bar" pos="1.6 1.0 0.016">
-      <freejoint name="bar"/>
-      <geom name="bar" type="box" size="0.06 0.015 0.015" mass="0.03" rgba="0.2 0.45 0.85 1"/>
-    </body>
-
     <!-- Item: 4 cm cube. Tasks place it per episode. -->
     <body name="cube" pos="0 -0.12 0.336">
       <freejoint name="cube"/>
       <geom name="cube" type="box" size="0.02 0.02 0.02" mass="0.03" rgba="0.85 0.2 0.15 1"/>
     </body>
 
-    <!-- Distractors (Randomisation in 1tasks_scene.md): round shapes, nothing cube- or bar-like
+    <!-- Distractors (Randomisation in 1tasks_scene.md): round shapes, nothing cube-like
          (RoboTwin's rule). Parked on the floor; sim/randomize.py puts 0-2 of them on the table. -->
     <body name="puck" pos="1.0 1.4 0.007">
       <freejoint name="puck"/>

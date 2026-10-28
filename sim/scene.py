@@ -23,7 +23,7 @@ ARMS = ("left", "right")
 ARM_NAME = {"A": "left", "B": "right"}  # names used in commands
 ARM_JOINTS = ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll")
 DRAWER_PULL = 0.14  # m, full travel of the drawer joint (end stop)
-ITEMS = ("cube", "bar")
+ITEMS = ("cube",)
 DISTRACTORS = ("puck", "cylinder", "pebble")
 
 GRIPPER_OPEN = 1.2  # rad, ~9 cm between fingertips
@@ -39,6 +39,11 @@ START_NOISE = 0.02  # rad, σ per arm joint at reset
 DEMO_NOISE = 0.008  # rad, σ of the demonstration noise, as validated in the deprecated expert (fingertip ~3 mm RMS)
 NOISE_TAU = 0.25  # s, correlation time of demonstration noise (smooth drift, not jitter)
 NOISE_RAMP = 0.2  # s, demonstration noise fades in/out over this time
+CONTROL_EVERY = 10  # physics steps per command for recorded episodes: 50 Hz zero-order hold, one command per
+# 50 fps frame, as ACT's scripted sim policy (2data_collection.md, design point 1)
+# What Sim.step saves before each tick: the full physics state plus the solver's warm start, so replaying the
+# recorded commands from it is exact. Not ctrl: that is the recorded action.
+STATE_SPEC = mujoco.mjtState.mjSTATE_FULLPHYSICS | mujoco.mjtState.mjSTATE_WARMSTART
 
 DOWN = np.array([0.0, 0.0, -1.0])
 LIMIT_MARGIN = 0.05  # rad; IK stays this far inside joint limits (a joint at its limit gets pushed back)
@@ -194,6 +199,15 @@ class Sim:
         self.cube_yaw_drawer = 0.0  # rad, the same inside the drawer (a smaller range)
         self.distractor_xy: dict[str, np.ndarray] = {}  # distractors on the table and where they started
         self.pushed = 0.0  # m, farthest an item moved while being approached for a grasp (sim/skills.py)
+        # Control clock: the expert writes data.ctrl every step, but the actuators get it only every
+        # control_every steps and hold it in between (1 = every step). At each such tick, before the
+        # physics step, step() saves what a recorder needs:
+        #   ticked        True during the on_step call of a tick step
+        #   tick_state    physics state before the tick (STATE_SPEC)
+        #   applied_ctrl  the command held until the next tick, with demonstration noise
+        #   nominal_ctrl  the same without demonstration noise
+        self.control_every = 1
+        self.subtask = 0  # 0, then 1 once a composite's first arm is back home (sim/skills.py)
         self.reset(seed, noise)
 
     # --- state -------------------------------------------------------------
@@ -210,6 +224,9 @@ class Sim:
             self.data.qpos[arm.grip_qadr] = GRIPPER_CLOSED
             self.data.ctrl[arm.grip_act] = GRIPPER_CLOSED
         self.arm_contacts = 0
+        self.step_count = 0  # physics steps since reset; a tick is every control_every-th step
+        self.ticked = False
+        self.subtask = 0
         self.max_jump = 0.0  # largest joint change between move_line waypoints (rad); big = IK switched branch
         mujoco.mj_forward(self.model, self.data)
 
@@ -285,31 +302,37 @@ class Sim:
     # --- motion ------------------------------------------------------------
     def step(self, n: int = 1, on_step=None):
         for _ in range(n):
-            nominal = self._apply_demo_noise()
+            self.ticked = self.step_count % self.control_every == 0
+            if self.ticked:
+                self.tick_state = np.empty(mujoco.mj_stateSize(self.model, STATE_SPEC))
+                mujoco.mj_getState(self.model, self.data, self.tick_state, STATE_SPEC)
+                self.nominal_ctrl = self.data.ctrl.copy()
+                self.applied_ctrl = self.nominal_ctrl + self._demo_noise_offset()
+            expert = self.data.ctrl.copy()  # the expert reads its own (clean, latest) command back from ctrl
+            self.data.ctrl[:] = self.applied_ctrl
             mujoco.mj_step(self.model, self.data)
-            self.applied_ctrl = self.data.ctrl.copy()  # what the actuators actually got (record this)
-            if nominal is not None:
-                self.data.ctrl[:] = nominal
+            self.data.ctrl[:] = expert
+            self.step_count += 1
             if self.arms_touching():
                 self.arm_contacts += 1
             if on_step is not None:
                 on_step(self)
 
-    def _apply_demo_noise(self):
-        """Advance each arm's noise (Ornstein-Uhlenbeck, so it drifts smoothly) and add it to the
-        arm's joint commands, scaled by a gate that fades in/out. Returns the nominal ctrl to restore."""
+    def _demo_noise_offset(self) -> np.ndarray:
+        """Advance each arm's noise by one control interval (Ornstein-Uhlenbeck, so it drifts smoothly)
+        and return the offset to add to ctrl: the noise on each arm's joints, scaled by a gate that fades in/out."""
+        offset = np.zeros(self.model.nu)
         if self.demo_noise <= 0:
-            return None
-        dt = self.model.opt.timestep
-        nominal = self.data.ctrl.copy()
+            return offset
+        dt = self.control_every * self.model.opt.timestep
         for name, arm in self.arms.items():
             x = self._offset[name]
             x += -x * dt / NOISE_TAU + self.demo_noise * np.sqrt(2 * dt / NOISE_TAU) * self.rng.standard_normal(5)
             step = dt / NOISE_RAMP
             g = self._gate[name]
             self._gate[name] = min(1.0, g + step) if self._gate_on[name] else max(0.0, g - step)
-            self.data.ctrl[arm.act] += self._gate[name] * x
-        return nominal
+            offset[arm.act] = self._gate[name] * x
+        return offset
 
     @contextmanager
     def noisy(self, arm: str, on_step=None):
@@ -369,6 +392,15 @@ class Sim:
         self.move_joints({arm: res.q}, duration, on_step=on_step)
         return res
 
-    def grip(self, arm: str, value: float, duration: float = 0.5, on_step=None):
-        self.data.ctrl[self.arms[arm].grip_act] = value
-        self.step(int(duration / self.model.opt.timestep), on_step)
+    def grip(self, arm: str, value: float, duration: float = 0.5, on_step=None, ramp: bool = False):
+        """Set the gripper target and wait `duration`; with `ramp`, move the target there gradually over `duration`."""
+        act = self.arms[arm].grip_act
+        n = int(duration / self.model.opt.timestep)
+        if not ramp:
+            self.data.ctrl[act] = value
+            self.step(n, on_step)
+            return
+        start = float(self.data.ctrl[act])
+        for i in range(1, n + 1):
+            self.data.ctrl[act] = start + (value - start) * i / n
+            self.step(1, on_step)

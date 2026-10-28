@@ -59,10 +59,9 @@ def test_colours(split):
     palette = RZ.TRAIN_COLOURS if split == "train" else RZ.EVAL_COLOURS
     for seed in SEEDS:
         _, info = fresh(seed, RZ.Randomization(split=split))
-        assert info["cube_colour"] in palette and info["bar_colour"] in palette
-        assert info["cube_colour"] != info["bar_colour"]
+        assert info["cube_colour"] in palette
         for d in info["distractors"]:
-            assert d["colour"] in palette and d["colour"] not in (info["cube_colour"], info["bar_colour"])
+            assert d["colour"] in palette and d["colour"] != info["cube_colour"]
     assert not set(RZ.TRAIN_COLOURS) & set(RZ.EVAL_COLOURS)
 
 
@@ -92,7 +91,7 @@ def test_distractors_on_table_and_clear_of_everything():
 
 def test_distractor_zones_clear_of_task_areas():
     pad = 0.025 + RZ.DISTRACTOR_MOVED  # largest distractor radius + margin
-    task_areas = [T.TABLE_AREA, T.BAR_AREA] + [((x, x), (y, y)) for x, y in T.CUBE_TARGETS.values()]
+    task_areas = [T.TABLE_AREA] + [((x, x), (y, y)) for x, y in T.CUBE_TARGETS.values()]
     for (zx0, zx1), (zy0, zy1) in RZ.DISTRACTOR_ZONES:
         for (ax0, ax1), (ay0, ay1) in task_areas:
             gap_x = max(zx0 - ax1, ax0 - zx1)
@@ -102,7 +101,7 @@ def test_distractor_zones_clear_of_task_areas():
 
 @pytest.mark.parametrize("task", sorted(RZ.COMMANDS))
 def test_commands(task):
-    names = dict(arm="A", target="left", giver="A", taker="B", opener="A", picker="B")
+    names = dict(arm="A", target="left", opener="A", picker="B", placer="A", closer="B")
     canonical = RZ.command(task, 0, RZ.NONE, **names)
     assert canonical == RZ.COMMANDS[task][0].format(**names)
     train = {RZ.command(task, s, RZ.Randomization(), **names) for s in SEEDS}
@@ -125,3 +124,15 @@ def test_rotated_cube_graspable(arm, u):
     for x, y in corners_and_centre(T.DRAWER_AREA):
         T.place_cube_in_drawer(s, (x, y - T.DRAWER_OPEN))
         assert T.plan_cube_grasp(s, arm) is not None, ("drawer", x, y)
+
+
+def test_seed_ranges():
+    """20 variants; each has its own training block, no seed is in two blocks, and evaluation seeds are
+    outside training (every variant evaluates on the same EVAL_SEEDS)."""
+    assert len(RZ.VARIANTS) == 20
+    blocks = [set(RZ.train_seeds(*v)) for v in RZ.VARIANTS]
+    assert all(len(b) == RZ.TRAIN_BLOCK for b in blocks)
+    assert len(set().union(*blocks)) == RZ.TRAIN_BLOCK * len(RZ.VARIANTS)
+    assert set().union(*blocks) == set(RZ.TRAIN_SEEDS)
+    assert not set(RZ.TRAIN_SEEDS) & set(RZ.EVAL_SEEDS)
+    assert RZ.EVAL_SEEDS.start == 100_000

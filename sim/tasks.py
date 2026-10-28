@@ -35,6 +35,7 @@ DRAWER_OPEN = 0.14  # m, opening used by S1/S4 = the end stop
 # touches it (S3: 3 of 156 starts had no grasp at 13-14 cm).
 DRAWER_PARTLY_OPEN = (0.06, 0.12)
 DRAWER_FRONT_Y = 0.08  # m, cabinet front (y of the closed drawer front)
+CABINET_TOP_FRONT = np.array([0.0, 0.13, 0.42])  # front edge of the cabinet top (recessed 5 cm), centre
 PRE_GRASP = 0.06  # m back from the grasp along the pointing direction
 POINT_TOL = np.deg2rad(8)
 
@@ -46,21 +47,15 @@ TABLE_AREA = ((-0.08, 0.08), (-0.20, -0.15))  # (x range, y range), world frame;
 # At DRAWER_OPEN this is world x -0.01..0.01, y -0.015..0.01, inside the patch both arms reach.
 DRAWER_AREA = ((-0.01, 0.01), (0.125, 0.15))  # failures clustered at the corners of ±0.02 x 0.12-0.16
 DRAWER_FLOOR_Z = 0.326
-CUBE_TARGETS = {"left": (-0.08, -0.18), "middle": (0.0, -0.18), "right": (0.08, -0.18)}  # named spots for S4/T2
-S3_TARGET = CUBE_TARGETS["middle"]  # S3 always moves the cube here (many sources, one target; S4 is the reverse)
-# A table start never lies within this of S3_TARGET, for S1 and S2 as well as S3, so the start
-# distribution is the same for all three (a cube near the middle would otherwise mean "not S3").
-# Above the 2 cm success radius, so no S3 start is already solved.
-START_CLEARANCE = 0.03
+CUBE_TARGETS = {"left": (-0.08, -0.18), "middle": (0.0, -0.18), "right": (0.08, -0.18)}  # named spots for S4/T1
+# Where S3/T2 put the cube in the drawer: the centre of DRAWER_AREA (drawer frame), so a cube put
+# there is where S4/T1 would find one.
+DRAWER_DROP = (0.0, 0.1375)
 
 
 def table_xy(rng: np.random.Generator) -> tuple[float, float]:
-    """Cube start on the table: uniform over TABLE_AREA outside START_CLEARANCE of S3_TARGET."""
     (x0, x1), (y0, y1) = TABLE_AREA
-    while True:
-        xy = float(rng.uniform(x0, x1)), float(rng.uniform(y0, y1))
-        if np.hypot(xy[0] - S3_TARGET[0], xy[1] - S3_TARGET[1]) >= START_CLEARANCE:
-            return xy
+    return float(rng.uniform(x0, x1)), float(rng.uniform(y0, y1))
 
 
 def drawer_xy(rng: np.random.Generator, opening: float) -> tuple[float, float]:
@@ -163,6 +158,17 @@ def plan_cube_grasp(sim: Sim, arm: str, tilt: float = CUBE_TILT, grip_height: fl
     return plan_top_grasp(sim, arm, c, face, CUBE_W, cube_open(sim), "cube", tilt, mid_roll=True)
 
 
+def plan_drawer_drop(sim: Sim, arm: str, grip_height: float = 0.02) -> GraspPlan | None:
+    """Where the gripper must be to set a held cube down at DRAWER_DROP at the drawer's current
+    opening: S4's in-drawer grasp, mirrored (jaws along x, so they open parallel to the drawer
+    front and clear the front and back walls). The wrist roll keeps the camera mount away from the
+    cabinet top: with the drawer barely open, the other roll tucks the mount under the top's
+    front edge at the drop pose, so the way down hits it although both checked poses are clear."""
+    x, y = DRAWER_DROP
+    c = np.array([x, y - sim.drawer_opening(), DRAWER_FLOOR_Z + grip_height])
+    return plan_top_grasp(sim, arm, c, Y, CUBE_W, CUBE_OPEN_DRAWER, "drawer", camera_away_from=CABINET_TOP_FRONT)
+
+
 def plan_top_grasp(sim: Sim, arm: str, c, face, width: float, grip_open: float, body: str, tilt: float = CUBE_TILT,
                    camera_away_from=None, mid_roll: bool = False) -> GraspPlan | None:
     """The fixed top grasp: point `tilt`° from vertical along the arm's reach direction, jaws
@@ -223,34 +229,6 @@ def plan_top_grasp(sim: Sim, arm: str, c, face, width: float, grip_open: float, 
     return None if best is None else best[1]
 
 
-# --- bar (T1) -------------------------------------------------------------------------
-BAR_L, BAR_W = 0.12, 0.03  # m, length and width/height
-BAR_GRIP_IN = 0.03  # m, each arm grips this far in from its own end
-BAR_OPEN = 0.9  # rad gripper opening for the bar (~7 cm between fingertips)
-BAR_AREA = ((-0.02, 0.02), (-0.20, -0.15))  # bar centre start area; bar lies along x
-BAR_TARGETS = {"left": (-0.04, -0.175), "middle": (0.0, -0.175), "right": (0.04, -0.175)}
-
-
-def place_bar_on_table(sim: Sim, xy, yaw: float = 0.0):
-    sim.place("bar", (xy[0], xy[1], TABLE_Z + BAR_W / 2 + 0.001), quat=(np.cos(yaw / 2), 0, 0, np.sin(yaw / 2)))
-
-
-def bar_grip_point(sim: Sim, arm: str) -> np.ndarray:
-    """Point BAR_GRIP_IN from the bar's end nearer to `arm`, on the bar's axis."""
-    R = sim.data.body("bar").xmat.reshape(3, 3)
-    c = sim.body_pos("bar")
-    axis = R[:, 0]
-    base = sim.data.body(f"{arm}/shoulder").xpos
-    sign = 1.0 if (base - c) @ axis > 0 else -1.0  # toward the arm's own end
-    return c + sign * (BAR_L / 2 - BAR_GRIP_IN) * axis
-
-
-def plan_bar_grasp(sim: Sim, arm: str, tilt: float = CUBE_TILT, camera_away_from=None) -> GraspPlan | None:
-    """Top grasp near the arm's own end of the bar, jaws closing across the bar's width."""
-    axis = sim.data.body("bar").xmat.reshape(3, 3)[:, 0]
-    return plan_top_grasp(sim, arm, bar_grip_point(sim, arm), axis, BAR_W, BAR_OPEN, "bar", tilt, camera_away_from)
-
-
 def plan_handle_grasp(sim: Sim, arm: str, opening: float | None = None, tilt: float = HANDLE_TILT) -> GraspPlan | None:
     """Fixed top grasp of the handle bar at the drawer's current (or given) opening."""
     a = sim.arms[arm]
@@ -272,63 +250,3 @@ def plan_handle_grasp(sim: Sim, arm: str, opening: float | None = None, tilt: fl
     if _check_poses(sim, arm, (r2.q, r3.q), HANDLE_OPEN, {"table", "cabinet", "drawer", "cube"}):
         return None
     return GraspPlan(point=pt, jaw_perp=X, grasp=g, pre=pre, q_grasp=r2.q, q_pre=r3.q)
-
-
-# --- T1 hand-off ------------------------------------------------------------------------
-MEET = np.array([0.0, -0.08, 0.40])  # in front of the table centre, off the line between the bases;
-# low enough that the giver can point straight down (block upright)
-HANDOFF_GIVER_GRIP = 0.028  # giver's fingertips 1.2 cm below the cube's top, leaving the lower half free
-HANDOFF_TAKER_LOW = 0.012  # taker grips this far below the cube's centre
-# The giver grips the block by its front/back faces (jaws along y), so the faces toward both arms
-# (±x) stay free; the taker then grips the lower part of the same front/back faces from its side.
-HANDOFF_GIVER_JAW_PERP = X
-
-
-def plan_taker_grasp(sim: Sim, taker: str) -> GraspPlan | None:
-    """Side grasp of the lower part of the held cube: jaws close across the two cube faces most
-    parallel to the taker's reach direction (as on the table); pointing along that direction,
-    tilted down as little as possible. None if no tilt works without touching the giver or the cube."""
-    a = sim.arms[taker]
-    R = sim.data.body("cube").xmat.reshape(3, 3)
-    target = sim.body_pos("cube") - HANDOFF_TAKER_LOW * R[:, 2]
-    rad = radial(sim, taker, target)
-    # Jaw axis must lie along a face normal, not diagonally: constrain it perpendicular to the
-    # cube's horizontal axis that points most along the reach direction.
-    face = R[:, 0] if abs(R[:, 0] @ rad) > abs(R[:, 1] @ rad) else R[:, 1]
-    for t in range(0, 91, 15):
-        pt = np.cos(np.deg2rad(t)) * rad + np.sin(np.deg2rad(t)) * DOWN
-        r0 = solve_ik(sim.model, a, target, point=pt, jaw_perp=face, restarts=8)
-        if not r0.ok(point_tol=POINT_TOL):
-            continue
-        # Try both wrist rolls: the SO-101's fixed jaw is on one side, and which side faces the
-        # giver decides whether the open gripper clears it.
-        for flip in (0.0, np.pi, -np.pi):
-            seed_q = r0.q.copy()
-            seed_q[4] += flip
-            if not a.lo[4] <= seed_q[4] <= a.hi[4]:
-                continue
-            plan = _taker_plan_from(sim, taker, target, pt, face, seed_q)
-            if plan is not None:
-                return plan
-    return None
-
-
-def _taker_plan_from(sim: Sim, taker: str, target, pt, face, seed_q) -> GraspPlan | None:
-    a = sim.arms[taker]
-    if True:
-        r1 = solve_ik(sim.model, a, target, point=pt, jaw_perp=face, q0=seed_q)
-        if not r1.ok(point_tol=POINT_TOL):
-            return None
-        scratch = mujoco.MjData(sim.model)
-        scratch.qpos[:] = sim.data.qpos
-        scratch.qpos[a.qadr] = r1.q
-        mujoco.mj_kinematics(sim.model, scratch)
-        g = grasp_target(target, scratch.site_xmat[a.site].reshape(3, 3)[:, 2], CUBE_W)
-        r2 = solve_ik(sim.model, a, g, point=pt, jaw_perp=face, q0=r1.q)
-        pre = g - PRE_GRASP * pt
-        r3 = solve_ik(sim.model, a, pre, point=pt, jaw_perp=face, q0=r2.q, restarts=4)
-        if not (r2.ok(point_tol=POINT_TOL) and r3.ok(point_tol=POINT_TOL)):
-            return None
-        if _check_poses(sim, taker, (r2.q, r3.q), CUBE_OPEN, {"cube", "table", "cabinet", "drawer"}):
-            return None
-        return GraspPlan(point=pt, jaw_perp=face, grasp=g, pre=pre, q_grasp=r2.q, q_pre=r3.q)

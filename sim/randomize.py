@@ -11,7 +11,7 @@ can be added and validated one at a time. Where each is drawn:
                   or off doesn't change an episode's item starts or noise:
 
     colours      item colours from a palette (held-out colours for the eval split)
-    distractors  0..n round objects in zones clear of the arms' work (nothing cube- or bar-like)
+    distractors  0..n round objects in zones clear of the arms' work (nothing cube-like)
     cube_yaw     cube rotation about z: ±45° on the table (the cube repeats every 90°, so this is
                  every orientation), ±20° in the drawer (arm B found no grasp from +25°)
     lighting     direction, intensity and tint of the main light; headlight level
@@ -45,7 +45,7 @@ EVAL_COLOURS = {
 }
 
 # Distractor zones (x range, y range of the centre), world frame: beside the cabinet and in the
-# front corners, away from the cube/bar areas, the S3 targets, the drawer's path and the paths
+# front corners, away from the cube's table area, the cube targets, the drawer's path and the paths
 # the arms take to them. One distractor per zone, so they never overlap.
 DISTRACTOR_ZONES = (
     ((-0.27, -0.15), (0.10, 0.21)),  # back left
@@ -61,6 +61,27 @@ LIGHT_TINT = 0.1  # ± per colour channel (warm/cool)
 HEADLIGHT_DIFFUSE = (0.4, 0.7)  # scene default 0.6
 HEADLIGHT_AMBIENT = (0.2, 0.4)  # scene default 0.3
 
+# The 20 variants (task, arm, target): one exact command each. arm is the opener in T1 and the placer in T2;
+# target is None except in S4 and T1. Same order as the one-hot variant input (1tasks_scene.md).
+TARGETS = ("left", "middle", "right")
+VARIANTS = tuple((task, arm, target) for task in ("S1", "S2", "S3", "S4", "T1", "T2") for arm in ("A", "B")
+                 for target in (TARGETS if task in ("S4", "T1") else (None,)))
+
+# Episode seeds. A seed fixes the whole start (a run_* draws it from the seed alone), so the same seed gives the
+# same start in every task that shares the scene. Training: every episode gets its own seed, so every recorded
+# start is different (as LIBERO's per-task init states and RoboTwin's per-episode draws); variant k records from
+# its own block of TRAIN_BLOCK seeds, room for failed episodes and for picking S2's two start kinds.
+# Evaluation: every variant uses the same EVAL_SEEDS, so swap tests compare commands on identical starts.
+TRAIN_BLOCK = 500
+TRAIN_SEEDS = range(1, 1 + TRAIN_BLOCK * len(VARIANTS))  # 1-10,000
+EVAL_SEEDS = range(100_000, 101_000)
+
+
+def train_seeds(task: str, arm: str, target: str | None = None) -> range:
+    """The training seeds of one variant: its own block, shared with no other variant."""
+    k = VARIANTS.index((task, arm, target))
+    return range(TRAIN_SEEDS.start + k * TRAIN_BLOCK, TRAIN_SEEDS.start + (k + 1) * TRAIN_BLOCK)
+
 # Command paraphrases per task. The first is the canonical command (1tasks_scene.md); the last is
 # held out for the eval split.
 COMMANDS = {
@@ -70,18 +91,18 @@ COMMANDS = {
     "S2": ("close the drawer with arm {arm}",
            "use arm {arm} to close the drawer",
            "arm {arm}, push the drawer shut"),
-    "S3": ("move the cube to the middle with arm {arm}",
-           "use arm {arm} to move the cube to the middle",
-           "arm {arm}, put the cube in the middle"),
+    "S3": ("put the cube in the drawer with arm {arm}",
+           "use arm {arm} to put the cube in the drawer",
+           "arm {arm}, place the cube inside the drawer"),
     "S4": ("take the cube out of the drawer and put it on the {target} of the table with arm {arm}",
            "use arm {arm} to take the cube out of the drawer and put it on the {target} of the table",
            "arm {arm}, move the cube from the drawer to the {target} of the table"),
-    "T1": ("pick up the bar with arm {giver}, hand it to arm {taker} and put it down on the middle of the table",
-           "use arm {giver} to pick up the bar and pass it to arm {taker}, who puts it on the middle of the table",
-           "hand the bar from arm {giver} to arm {taker} and place it on the middle of the table"),
-    "T2": ("open the drawer with arm {opener}, then take the cube out and put it on the {target} of the table with arm {picker}",
+    "T1": ("open the drawer with arm {opener}, then take the cube out and put it on the {target} of the table with arm {picker}",
            "use arm {opener} to open the drawer, then arm {picker} to take the cube out and put it on the {target} of the table",
            "arm {opener} opens the drawer and arm {picker} moves the cube to the {target} of the table"),
+    "T2": ("put the cube in the drawer with arm {placer}, then close the drawer with arm {closer}",
+           "use arm {placer} to put the cube in the drawer, then arm {closer} to close it",
+           "arm {placer} places the cube in the drawer and arm {closer} pushes the drawer shut"),
 }
 
 
@@ -115,11 +136,9 @@ def apply(sim: Sim, seed: int, cfg: Randomization) -> dict:
     palette = TRAIN_COLOURS if cfg.split == "train" else EVAL_COLOURS
     names = list(palette)
     if cfg.colours:
-        # The cube and the bar never share a colour in one episode.
-        cube, bar = (names[i] for i in rng.choice(len(names), 2, replace=False))
+        cube = names[rng.integers(len(names))]
         set_colour(sim, "cube", palette[cube])
-        set_colour(sim, "bar", palette[bar])
-        info.update(cube_colour=cube, bar_colour=bar)
+        info.update(cube_colour=cube)
     if cfg.cube_yaw:
         # One draw scaled to each range; the task uses whichever applies to where the cube starts.
         u = rng.uniform(-1, 1)
@@ -131,9 +150,9 @@ def apply(sim: Sim, seed: int, cfg: Randomization) -> dict:
         n = int(rng.integers(0, cfg.distractors + 1))
         bodies = rng.choice(DISTRACTORS, n, replace=False)
         zones = rng.choice(len(DISTRACTOR_ZONES), n, replace=False)
-        # Distractor colours come from the full palette but never match the items', so the
+        # Distractor colours come from the full palette but never match the cube's, so the
         # command's object is the only one of its colour.
-        free = [c for c in names if c not in (info.get("cube_colour"), info.get("bar_colour"))]
+        free = [c for c in names if c != info.get("cube_colour")]
         placed = []
         for body, zone in zip(map(str, bodies), zones):
             (x0, x1), (y0, y1) = DISTRACTOR_ZONES[zone]
@@ -177,7 +196,7 @@ def distractors_moved(sim: Sim) -> float:
 
 
 def command(task: str, seed: int, cfg: Randomization, **names) -> str:
-    """The episode's command string. `names`: arm / target / giver / taker / opener / picker."""
+    """The episode's command string. `names`: arm / target / opener / picker / placer / closer."""
     options = COMMANDS[task]
     if not cfg.wording:
         template = options[0]

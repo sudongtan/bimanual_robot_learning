@@ -80,7 +80,7 @@ def test_S1_S2_handle_graspable_over_full_pull(sim, arm):
 
 
 @pytest.mark.parametrize("arm", ARMS)
-def test_S3_T1_cube_graspable_in_table_area(sim, arm):
+def test_S3_cube_graspable_in_table_area(sim, arm):
     for xy in corners_and_centre(T.TABLE_AREA):
         T.place_cube_on_table(sim, xy)
         assert T.plan_cube_grasp(sim, arm) is not None, xy
@@ -94,12 +94,19 @@ def test_cube_targets_graspable(sim, arm):
 
 
 @pytest.mark.parametrize("arm", ARMS)
-def test_S4_T2_cube_graspable_in_open_drawer(sim, arm):
+def test_S4_T1_cube_graspable_in_open_drawer(sim, arm):
     sim.set_drawer(T.DRAWER_OPEN)
     (x0, x1), (y0, y1) = T.DRAWER_AREA
     for x, y in corners_and_centre(T.DRAWER_AREA):
         T.place_cube_in_drawer(sim, (x, y - T.DRAWER_OPEN))
         assert T.plan_cube_grasp(sim, arm) is not None, (x, y)
+
+
+@pytest.mark.parametrize("arm", ARMS)
+def test_S3_T2_drawer_drop_reachable_when_partly_open(sim, arm):
+    for opening in np.linspace(*T.DRAWER_PARTLY_OPEN, 4):
+        sim.set_drawer(opening)
+        assert T.plan_drawer_drop(sim, arm) is not None, opening
 
 
 def test_drawer_area_is_inside_the_drawer(sim):
@@ -131,4 +138,3 @@ def test_area_sampling_stays_inside():
     for _ in range(200):
         x, y = T.table_xy(rng)
         assert x0 <= x <= x1 and y0 <= y <= y1
-        assert np.hypot(x - T.S3_TARGET[0], y - T.S3_TARGET[1]) >= T.START_CLEARANCE
