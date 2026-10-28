@@ -58,7 +58,7 @@ If a start scene only ever appears with one task, a policy can learn "this scene
 | Drawer partly open (6–12 cm), cube on the table | S2, S3, T2 | S2 50, S3 100, T2 100 |
 | Drawer fully open (14 cm), cube inside | S2, S4 | S2 50, S4 300 |
 
-Each scene is drawn by the same code for every task that starts from it (`partly_open_start` in `sim/skills.py` for the second; `S2_CUBE_IN_DRAWER = 0.5` splits S2 between the second and third). Item starts never depend on the target.
+Each scene is drawn by the same code for every task that starts from it (`reset` in `sim/episode.py`; `S2_CUBE_IN_DRAWER = 0.5` splits S2 between the second and third). Item starts never depend on the target.
 
 **Known imbalance:** the counts within a scene are uneven, so always guessing the most common task is right 75% of the time in the first scene (T1) and 86% in the third (S4). The scene doesn't decide the task, but ignoring the command is often rewarded. Balance by sampling within each scene during training (oversample the smaller tasks), and check with the swap tests.
 
@@ -112,7 +112,17 @@ It reads object positions from the simulator, as in ACT, ManiSkill and RoboTwin.
 - **Handle grip:** the gripper closes on the drawer handle gradually over 0.4 s; snapping shut drags the drawer ~5 mm at once and slid the cube inside it.
 - **Composites:** the first arm returns home before the second arm starts. `sim.subtask` switches from 0 to 1 at that point (the per-frame label of design point 5).
 - **Hold:** every episode ends with both arms at home for 2 s (`HOLD_S`), recorded, as the end of ACT's fixed-length scripted episodes. It is one ACT action chunk (100 frames at 50 fps), so a policy is trained on what to do after the task (stay), instead of those steps being padded out (LeRobot's `action_is_pad`). It is the same for every task, so holding still doesn't give away the task. A joint moving > 0.05 rad (`HOLD_STILL`) or the cube or drawer moving > 5 mm during the hold fails the episode.
-- **Episode result:** each `run_*` returns a dict with `task`, the arm/target arguments (`arm`, or `opener` in T1 and `placer` in T2), `seed`, `success`, `command`, `scene` (what the randomisation drew), `arm_contacts`, `max_jump`, `pushed`, `distractor_moved`, `hold_motion`, `hold_moved`, and for S2 the start kind (`cube_in_drawer`).
+- **Episode result:** each `run_*` returns a dict with `task`, the command's names (`arm` and `target`, or `opener`/`picker` in T1 and `placer`/`closer` in T2), `seed`, `success`, `checks`, `command`, `scene` (what the randomisation drew), `arm_contacts`, `max_jump`, `pushed`, `distractor_moved`, `hold_motion`, `hold_moved`, `arm_moved` (each arm's largest joint distance from its start), `cube_drop` (the cube's longest fall with no arm touching it), and for S2 the start kind (`cube_in_drawer`). `success` = every entry of `checks` plus the checks on the demonstration itself (`pushed`, the hold).
+
+## Success checks (`sim/episode.py`)
+
+The start (`reset`), the per-step monitor and the success check (`success`) don't use anything from the scripted expert, so a policy rollout is scored the same way as a demonstration (as LIBERO's and ManiSkill's success checks read only the simulator). `success` returns each check by name:
+
+- **The task's condition**, from the Tasks table: drawer open or closed, cube upright in the drawer or within 2 cm of its target, and the extras listed there (S1: cube kept its place in the drawer; S3: drawer didn't move). S3 and T2 also need the cube set down, not dropped: it fell < 15 mm with no arm touching it (`DROPPED`). The expert releases ~5 mm above the floor (6–9 mm measured).
+- **Who did it.** In a primitive, the named arm touched its item (drawer or cube), and the other arm never left home (every joint < 0.1 rad from its start, `IDLE_MOVE`, the same threshold as the continue rate). In a composite, each arm touched its own step's item, and the first arm never touched the second step's. Without this, opening the drawer with arm B when told arm A would pass.
+- **For every task:** no arm-to-arm contact, no distractor moved > 5 mm.
+
+Two checks apply only to demonstrations, in `skills.finish`: nothing pushed while the expert approaches it (`pushed`, measured inside the expert's approach), and the still 2 s hold (`hold_motion`, `hold_moved`). For policies, the stop rate in the plan below replaces the hold check.
 
 ## Key decisions
 
@@ -148,12 +158,13 @@ python -m sim.validate 40 all eval      # held-out colours and phrasings
 | `sim/assets/so101/` | SO-101 model (MuJoCo Menagerie, Apache-2.0); wrist camera set to 75° |
 | `sim/scene.py` | Model loading, IK, controller, demonstration noise, arm-contact monitor |
 | `sim/tasks.py` | Task geometry, start areas, grasp planning |
+| `sim/episode.py` | What every episode needs, whoever acts: start (`reset`), per-step `Monitor`, `success` |
 | `sim/skills.py` | One scripted episode per task: `run_S1` … `run_S4`, `run_T1`, `run_T2` |
 | `sim/randomize.py` | `Randomization`: every randomisation factor; command templates |
 | `sim/validate.py` | Validation over random starts, per factor |
 | `sim/record.py` | Episode recorder: LeRobot dataset plus exact-replay states, see `2data_collection.md` |
 | `sim/evaluate.py` (to write) | Policy rollouts in sim under the evaluation conditions in the plan |
-| `tests/` | `test_workcell.py` (geometry, reach), `test_randomize.py` (randomisation, seeds), `test_tasks.py` (episodes, exact replay), `test_record.py` (recorder) |
+| `tests/` | `test_workcell.py` (geometry, reach), `test_randomize.py` (randomisation, seeds), `test_tasks.py` (episodes, exact replay), `test_episode.py` (starts, success checks), `test_record.py` (recorder) |
 | `deprecated/` | The earlier design; ignore |
 
 ## Plan: data and training, step by step
@@ -177,7 +188,7 @@ ACT/DP with the one-hot input never sees the command, so it gets the first two c
 | **Stop rate** | S1 (or S3) | The task succeeds, and in the last 2 s of the horizon no joint of either arm moves > 0.05 rad and the cube and drawer move < 5 mm (the expert's hold check) |
 | **Continue rate** | T1 (or T2) | After the first arm finishes its step, the second arm leaves home (a joint > 0.1 rad from its start) before the horizon ends |
 
-A policy that ignores the command does well on one of the two and badly on the other; one that follows it does well on both. There is no policy evaluation script yet (`sim/evaluate.py`, to write). When it is written: `split` in `Randomization` currently switches colours and phrasings together, so it has to become one setting per factor to run the second and third conditions.
+A policy that ignores the command does well on one of the two and badly on the other; one that follows it does well on both. There is no policy evaluation script yet (`sim/evaluate.py`, to write); it builds on `reset` and `success` in `sim/episode.py`. The second and third conditions are `Randomization(colours_split="eval")` and `Randomization(wording_split="eval")` (`split="eval"` holds out both).
 
 **Variant input (one-hot, 11 dims)**, appended to `observation.state` for ACT/DP: task (6: S1, S2, S3, S4, T1, T2) + arm (2: A, B; the opener in T1, the placer in T2) + target (3: left, middle, right; all zero for S1, S2, S3, T2). The recorder saves task, arm and target per episode, so the vector can be built at training time.
 

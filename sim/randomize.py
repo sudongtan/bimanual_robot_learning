@@ -117,6 +117,14 @@ class Randomization:
     lighting: bool = True
     wording: bool = True
     split: str = "train"  # "train" or "eval": eval uses the held-out colours and phrasings
+    # One factor held out on its own (the evaluation conditions in 1tasks_scene.md): "train" or "eval"
+    # overrides `split` for that factor; None follows `split`.
+    colours_split: str | None = None
+    wording_split: str | None = None
+
+    def split_of(self, factor: str) -> str:
+        """The split one held-out factor uses ("colours" or "wording")."""
+        return getattr(self, f"{factor}_split") or self.split
 
 
 NONE = Randomization(start_noise=0.0, demo_noise=0.0, colours=False, distractors=0, cube_yaw=0.0, cube_yaw_drawer=0.0,
@@ -133,7 +141,7 @@ def apply(sim: Sim, seed: int, cfg: Randomization) -> dict:
     its items). Returns what was drawn, for the episode record."""
     rng = episode_rng(seed)
     info: dict = {}
-    palette = TRAIN_COLOURS if cfg.split == "train" else EVAL_COLOURS
+    palette = TRAIN_COLOURS if cfg.split_of("colours") == "train" else EVAL_COLOURS
     names = list(palette)
     if cfg.colours:
         cube = names[rng.integers(len(names))]
@@ -200,7 +208,7 @@ def command(task: str, seed: int, cfg: Randomization, **names) -> str:
     options = COMMANDS[task]
     if not cfg.wording:
         template = options[0]
-    elif cfg.split == "train":
+    elif cfg.split_of("wording") == "train":
         template = options[int(np.random.default_rng([seed, 2]).integers(len(options) - 1))]
     else:
         template = options[-1]

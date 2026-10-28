@@ -19,6 +19,7 @@ MAX_JUMP = 0.15  # rad between IK waypoints; larger means the arm switched postu
 
 def check(r):
     assert r["success"], r
+    assert all(r["checks"].values()), r  # the task's check, as a policy rollout is scored (sim/episode.py)
     assert r["arm_contacts"] == 0, r
     assert r["pushed"] < K.PUSHED, r
     assert r["max_jump"] < MAX_JUMP, r

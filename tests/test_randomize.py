@@ -136,3 +136,16 @@ def test_seed_ranges():
     assert set().union(*blocks) == set(RZ.TRAIN_SEEDS)
     assert not set(RZ.TRAIN_SEEDS) & set(RZ.EVAL_SEEDS)
     assert RZ.EVAL_SEEDS.start == 100_000
+
+
+def test_one_factor_held_out():
+    """colours_split / wording_split hold out one factor on its own (the evaluation conditions)."""
+    names = dict(arm="A")
+    colours_only = RZ.Randomization(colours_split="eval")
+    wording_only = RZ.Randomization(wording_split="eval")
+    for seed in SEEDS:
+        assert fresh(seed, colours_only)[1]["cube_colour"] in RZ.EVAL_COLOURS
+        assert RZ.command("S1", seed, colours_only, **names) != RZ.COMMANDS["S1"][-1].format(**names)
+        assert fresh(seed, wording_only)[1]["cube_colour"] in RZ.TRAIN_COLOURS
+        assert RZ.command("S1", seed, wording_only, **names) == RZ.COMMANDS["S1"][-1].format(**names)
+    assert RZ.Randomization(split="eval", colours_split="train").split_of("colours") == "train"

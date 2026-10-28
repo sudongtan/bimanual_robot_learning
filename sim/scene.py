@@ -227,6 +227,7 @@ class Sim:
         self.step_count = 0  # physics steps since reset; a tick is every control_every-th step
         self.ticked = False
         self.subtask = 0
+        self.monitor = None  # sim.episode.Monitor, attached once the episode's start is set; updated every step
         self.max_jump = 0.0  # largest joint change between move_line waypoints (rad); big = IK switched branch
         mujoco.mj_forward(self.model, self.data)
 
@@ -315,6 +316,8 @@ class Sim:
             self.step_count += 1
             if self.arms_touching():
                 self.arm_contacts += 1
+            if self.monitor is not None:
+                self.monitor.update(self)
             if on_step is not None:
                 on_step(self)
 

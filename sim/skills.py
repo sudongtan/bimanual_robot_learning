@@ -2,22 +2,26 @@
 joint-space moves to a hover point (with demonstration noise), straight lines for precise moves
 (no noise), one fixed grasp per target, and every skill starts and ends with the arm at home.
 
-Each `run_*` function plays a whole task in a fresh Sim and returns a result dict whose
-`success` field is the task's success check.
+Each `run_*` function plays a whole task from its start (`sim.episode.reset`) and returns a result
+dict: `checks` is the task's success check (`sim.episode.success`, the same for a policy rollout),
+and `success` is those plus the checks on the demonstration itself (nothing pushed while being
+approached, a still hold at the end).
 """
 
 from __future__ import annotations
 
 import numpy as np
 
+from sim import episode as E
 from sim import randomize as RZ
 from sim import tasks as T
+from sim.episode import (PUSHED, S2_CUBE_IN_DRAWER, cube_on_table_at, cube_upright_in_drawer,  # noqa: F401 (re-exported)
+                         new_sim, other, partly_open_start)
 from sim.randomize import Randomization
-from sim.scene import ARM_NAME, CONTROL_EVERY, GRIPPER_CLOSED, TABLE_Z, Sim, solve_ik
+from sim.scene import ARM_NAME, GRIPPER_CLOSED, TABLE_Z, Sim, solve_ik
 
 HOVER = 0.05  # m above the pre-grasp, reached in joint space
 CARRY_Z = 0.08  # m, fingertip height above the tabletop while carrying the cube
-PUSHED = 0.005  # m; an item pushed farther than this while being approached fails the episode
 PULL_PAST = 0.01  # m past the drawer's end stop that a full opening aims for (see move_drawer)
 HOLD_S = 2.0  # s, recorded hold with both arms at home at the end of every task: one ACT action chunk
 # (100 frames at 50 fps), so a policy is trained on staying still after the task (stop tests, 1tasks_scene.md)
@@ -142,22 +146,6 @@ def holding(sim: Sim, arm: str) -> bool:
     return bool(sim.touching(arm, "cube")) and sim.body_pos("cube")[2] > TABLE_Z + T.CUBE_H / 2 + 0.01
 
 
-def cube_on_table_at(sim: Sim, xy, tol: float = 0.02) -> bool:
-    p = sim.body_pos("cube")
-    upright = abs(sim.data.body("cube").xmat.reshape(3, 3)[2, 2]) > 0.95
-    on_table = abs(p[2] - (TABLE_Z + T.CUBE_H / 2)) < 0.005
-    return bool(np.linalg.norm(p[:2] - np.asarray(xy)) < tol and upright and on_table)
-
-
-def new_sim(seed: int, rand: Randomization) -> tuple[Sim, dict]:
-    """A fresh Sim with the episode's randomisation applied; returns it and what was drawn."""
-    sim = Sim(seed=seed, noise=rand.start_noise)
-    sim.demo_noise = rand.demo_noise
-    sim.control_every = CONTROL_EVERY
-    sim.clear_items()
-    return sim, RZ.apply(sim, seed, rand)
-
-
 def hold(sim: Sim, rec=None) -> tuple[float, float]:
     """Both arms stay at home for HOLD_S (recorded). Returns the largest joint motion (rad) and the
     largest cube or drawer motion (m) during the hold, both measured from its start."""
@@ -175,25 +163,27 @@ def hold(sim: Sim, rec=None) -> tuple[float, float]:
     return motion, max(float(np.linalg.norm(sim.body_pos("cube") - cube)), abs(sim.drawer_opening() - opening))
 
 
-def finish(sim: Sim, result: dict, scene: dict, rec=None) -> dict:
-    """Record the hold, then add the checks that apply to every episode."""
+def finish(sim: Sim, start: dict, info: dict, rec=None) -> dict:
+    """Record the hold, then score the episode: the task's success check (`sim.episode.success`) and
+    the checks on the demonstration itself, which only the expert has: nothing pushed while being
+    approached (`sim.pushed`, measured in approach_item) and a still hold."""
     hold_motion, hold_moved = hold(sim, rec)
-    moved = RZ.distractors_moved(sim)
+    ok, checks = E.success(sim, start)
+    task = start["variant"][0]
+    m = sim.monitor
+    result = dict(task=task, **E.roles(start["variant"]), seed=start["seed"], **info, command=start["command"])
+    if task == "S2":
+        result["cube_in_drawer"] = start["cube_in_drawer"]
     result.update(arm_contacts=sim.arm_contacts, max_jump=round(sim.max_jump, 2),
-                  distractor_moved=round(moved, 4), pushed=round(sim.pushed, 4),
-                  hold_motion=round(hold_motion, 4), hold_moved=round(hold_moved, 4), scene=scene)
-    result["success"] = (bool(result.get("success")) and sim.arm_contacts == 0 and moved < RZ.DISTRACTOR_MOVED
-                         and sim.pushed < PUSHED and hold_motion < HOLD_STILL and hold_moved < PUSHED)
+                  distractor_moved=round(RZ.distractors_moved(sim), 4), pushed=round(sim.pushed, 4),
+                  hold_motion=round(hold_motion, 4), hold_moved=round(hold_moved, 4),
+                  arm_moved={a: round(v, 3) for a, v in m.moved.items()}, cube_drop=round(m.drop, 4),
+                  checks=checks, scene=start["scene"])
+    result["success"] = ok and sim.pushed < PUSHED and hold_motion < HOLD_STILL and hold_moved < PUSHED
     return result
 
 
-# --- tasks (1tasks_scene.md) --------------------------------------------------------------
-
-
-def cube_upright_in_drawer(sim: Sim) -> bool:
-    """The cube rests on the drawer floor (not on a wall or the front), upright."""
-    on_floor = abs(sim.body_pos("cube")[2] - (T.DRAWER_FLOOR_Z + T.CUBE_H / 2)) < 0.005
-    return bool(on_floor and sim.data.body("cube").xmat.reshape(3, 3)[2, 2] > 0.95)
+# --- tasks (1tasks_scene.md); each start is drawn in sim.episode.reset -----------------------------
 
 
 def run_S1(arm: str, seed: int = 0, rec=None,
@@ -201,33 +191,10 @@ def run_S1(arm: str, seed: int = 0, rec=None,
     """S1: open the drawer with `arm` ("A" or "B"). Starts exactly like T1 (cube inside the closed
     drawer), so only the command tells S1 from T1. The cube rides out with the drawer and must
     keep its place in it (< 5 mm relative to the drawer), upright."""
-    sim, scene = new_sim(seed, rand)
-    rng = np.random.default_rng(seed)
-    T.place_cube_in_drawer(sim, T.drawer_xy(rng, 0.0))
-    sim.step(50)
-
-    def cube_xy():  # in the drawer's frame
-        return sim.body_pos("cube")[:2] + sim.drawer_opening() * T.Y[:2]
-
-    start = cube_xy()
-    ok = move_drawer(sim, ARM_NAME[arm], T.DRAWER_OPEN, rec)
-    moved = float(np.linalg.norm(cube_xy() - start))
-    return finish(sim, dict(task="S1", arm=arm, seed=seed, opened=round(sim.drawer_opening(), 3),
-                            cube_moved=round(moved, 4), command=RZ.command("S1", seed, rand, arm=arm),
-                            success=ok and sim.drawer_opening() > T.DRAWER_OPEN - 0.01 and moved < 0.005
-                            and cube_upright_in_drawer(sim)),
-                  scene, rec)
-
-
-S2_CUBE_IN_DRAWER = 0.5  # share of S2 episodes that start exactly like S4 (see run_S2)
-
-
-def partly_open_start(sim: Sim, rng) -> float:
-    """Drawer partly open (DRAWER_PARTLY_OPEN), cube on the table: the shared start of S2, S3 and
-    T2. Returns the opening."""
-    sim.set_drawer(float(rng.uniform(*T.DRAWER_PARTLY_OPEN)))
-    T.place_cube_on_table(sim, T.table_xy(rng))
-    return sim.drawer_opening()
+    sim, start = E.reset(("S1", arm, None), seed, rand)
+    move_drawer(sim, ARM_NAME[arm], T.DRAWER_OPEN, rec)
+    moved = float(np.linalg.norm(E.cube_in_drawer_frame(sim) - start["cube_drawer_xy"]))
+    return finish(sim, start, dict(opened=round(sim.drawer_opening(), 3), cube_moved=round(moved, 4)), rec)
 
 
 def run_S2(arm: str, seed: int = 0, rec=None,
@@ -237,86 +204,52 @@ def run_S2(arm: str, seed: int = 0, rec=None,
     drawer). Either way only the command tells S2 from the others (as in Language-Table and
     CALVIN, where one start state carries several instructions). A cube in the drawer rides in
     and must stay upright in it."""
-    sim, scene = new_sim(seed, rand)
-    rng = np.random.default_rng(seed)
-    in_drawer = bool(rng.random() < S2_CUBE_IN_DRAWER)
-    if in_drawer:
-        sim.set_drawer(T.DRAWER_OPEN)
-        T.place_cube_in_drawer(sim, T.drawer_xy(rng, T.DRAWER_OPEN))
-        sim.step(50)
-    else:
-        partly_open_start(sim, rng)
-    ok = move_drawer(sim, ARM_NAME[arm], 0.0, rec)
-    cube_ok = not in_drawer or cube_upright_in_drawer(sim)
-    return finish(sim, dict(task="S2", arm=arm, seed=seed, cube_in_drawer=in_drawer, opening=round(sim.drawer_opening(), 3),
-                            command=RZ.command("S2", seed, rand, arm=arm),
-                            success=ok and sim.drawer_opening() < 0.01 and cube_ok), scene, rec)
+    sim, start = E.reset(("S2", arm, None), seed, rand)
+    move_drawer(sim, ARM_NAME[arm], 0.0, rec)
+    return finish(sim, start, dict(opening=round(sim.drawer_opening(), 3)), rec)
 
 
-def put_cube_in_drawer(sim: Sim, arm: str, rec=None) -> tuple[bool, float]:
+def put_cube_in_drawer(sim: Sim, arm: str, rec=None) -> bool:
     """Pick the cube off the table and set it down in the (partly) open drawer. Returns whether
-    the cube ended upright in the drawer, and how far the drawer moved meanwhile."""
-    opening = sim.drawer_opening()
+    the cube ended upright in the drawer, set down (the expert's own view, to decide whether to go on)."""
     ok = pick_cube(sim, arm, rec) and place_cube_in_drawer(sim, arm, rec)
-    return ok and cube_upright_in_drawer(sim), abs(sim.drawer_opening() - opening)
+    return ok and cube_upright_in_drawer(sim)
 
 
 def run_S3(arm: str, seed: int = 0, rec=None,
            rand: Randomization = Randomization()) -> dict:
     """S3: put the cube in the drawer with `arm`. Starts like S2 and T2 (drawer partly open, cube
     anywhere on the table), so only the command tells them apart. The cube must end upright in the
-    drawer, and the drawer must not move."""
-    sim, scene = new_sim(seed, rand)
-    rng = np.random.default_rng(seed)
-    partly_open_start(sim, rng)
-    in_drawer, drawer_moved = put_cube_in_drawer(sim, ARM_NAME[arm], rec)
-    return finish(sim, dict(task="S3", arm=arm, seed=seed, drawer_moved=round(drawer_moved, 4),
-                            command=RZ.command("S3", seed, rand, arm=arm),
-                            success=in_drawer and drawer_moved < PUSHED), scene, rec)
+    drawer, set down (not dropped), and the drawer must not move."""
+    sim, start = E.reset(("S3", arm, None), seed, rand)
+    put_cube_in_drawer(sim, ARM_NAME[arm], rec)
+    return finish(sim, start, dict(drawer_moved=round(abs(sim.drawer_opening() - start["opening"]), 4)), rec)
 
 
 def run_S4(arm: str, target: str = "middle", seed: int = 0, rec=None,
            rand: Randomization = Randomization()) -> dict:
     """S4: take the cube out of the open drawer and put it on a named spot (CUBE_TARGETS) with `arm`."""
-    goal = T.CUBE_TARGETS[target]
-    sim, scene = new_sim(seed, rand)
-    rng = np.random.default_rng(seed)
-    sim.set_drawer(T.DRAWER_OPEN)
-    T.place_cube_in_drawer(sim, T.drawer_xy(rng, T.DRAWER_OPEN))
-    sim.step(50)
+    sim, start = E.reset(("S4", arm, target), seed, rand)
     a = ARM_NAME[arm]
     picked = pick_cube(sim, a, rec)
     if picked:
-        place_cube(sim, a, goal, rec)
-    return finish(sim, dict(task="S4", arm=arm, target=target, seed=seed, picked=picked,
-                            command=RZ.command("S4", seed, rand, arm=arm, target=target),
-                            success=picked and cube_on_table_at(sim, goal)), scene, rec)
-
-
-def other(arm: str) -> str:
-    return "B" if arm == "A" else "A"
+        place_cube(sim, a, T.CUBE_TARGETS[target], rec)
+    return finish(sim, start, dict(picked=picked), rec)
 
 
 def run_T1(opener: str, target: str = "middle", seed: int = 0, rec=None,
            rand: Randomization = Randomization()) -> dict:
     """T1 = S1 then S4: `opener` opens the drawer (cube inside), the other arm takes the cube out
     and puts it on a named spot (CUBE_TARGETS)."""
-    goal = T.CUBE_TARGETS[target]
-    sim, scene = new_sim(seed, rand)
-    rng = np.random.default_rng(seed)
-    T.place_cube_in_drawer(sim, T.drawer_xy(rng, 0.0))
-    sim.step(50)
+    sim, start = E.reset(("T1", opener, target), seed, rand)
     picker = other(opener)
     opened = move_drawer(sim, ARM_NAME[opener], T.DRAWER_OPEN, rec)
     sim.subtask = 1  # the opener is home: the S4 part (2data_collection.md, design point 5)
     sim.step(100, rec)
     picked = opened and pick_cube(sim, ARM_NAME[picker], rec)
     if picked:
-        place_cube(sim, ARM_NAME[picker], goal, rec)
-    return finish(sim, dict(task="T1", opener=opener, target=target, seed=seed, opened=round(sim.drawer_opening(), 3),
-                            picked=picked,
-                            command=RZ.command("T1", seed, rand, opener=opener, picker=picker, target=target),
-                            success=picked and cube_on_table_at(sim, goal)), scene, rec)
+        place_cube(sim, ARM_NAME[picker], T.CUBE_TARGETS[target], rec)
+    return finish(sim, start, dict(opened=round(sim.drawer_opening(), 3), picked=picked), rec)
 
 
 def run_T2(placer: str, seed: int = 0, rec=None,
@@ -324,16 +257,10 @@ def run_T2(placer: str, seed: int = 0, rec=None,
     """T2 = S3 then S2: `placer` puts the cube in the partly open drawer and goes home, then the
     other arm closes the drawer. Starts like S2 and S3. The cube must end upright in the closed
     drawer."""
-    sim, scene = new_sim(seed, rand)
-    rng = np.random.default_rng(seed)
-    partly_open_start(sim, rng)
-    closer = other(placer)
-    in_drawer, _ = put_cube_in_drawer(sim, ARM_NAME[placer], rec)
-    placed = in_drawer
+    sim, start = E.reset(("T2", placer, None), seed, rand)
+    placed = put_cube_in_drawer(sim, ARM_NAME[placer], rec)
     sim.subtask = 1  # the placer is home: the S2 part (2data_collection.md, design point 5)
     sim.step(100, rec)
-    closed = placed and move_drawer(sim, ARM_NAME[closer], 0.0, rec)
-    return finish(sim, dict(task="T2", placer=placer, seed=seed, placed=placed,
-                            opening=round(sim.drawer_opening(), 3),
-                            command=RZ.command("T2", seed, rand, placer=placer, closer=closer),
-                            success=closed and sim.drawer_opening() < 0.01 and cube_upright_in_drawer(sim)), scene, rec)
+    if placed:
+        move_drawer(sim, ARM_NAME[other(placer)], 0.0, rec)
+    return finish(sim, start, dict(placed=placed, opening=round(sim.drawer_opening(), 3)), rec)
