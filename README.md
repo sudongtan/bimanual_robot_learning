@@ -2,7 +2,7 @@
 
 A simulated two-arm SO-101 workcell (MuJoCo) where **the command is the only thing that tells the policy what to do**: which task, which arm, and where the cube goes. The start scenes are designed and audited so that none of these can be read off the scene. The workcell is used to measure how well imitation policies (ACT, Diffusion Policy) and a fine-tuned vision-language-action model follow commands, including when control passes from one arm to the other.
 
-*Status: the workcell, scripted expert and randomisation are built and validated. Data recording and training are next; no policy results yet.*
+*Status: the workcell, scripted expert, randomisation and recorder are built and validated. Recording the data and training are next; no policy results yet.*
 
 ## Purpose
 

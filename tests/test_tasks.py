@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from sim import skills as K
+from sim.record import Frames
 from sim.scene import CONTROL_EVERY, STATE_SPEC
 
 SEEDS = (0, 1)
@@ -36,24 +37,6 @@ def test_hold_is_recorded():
     tail = np.array(qs[-n:])
     assert len(qs) > n
     assert np.abs(tail - tail[0]).max() < K.HOLD_STILL
-
-
-class Frames:
-    """Records what the recorder will: at each control tick, the state before it, the held command and the subtask."""
-
-    def __init__(self):
-        self.states, self.actions, self.nominal, self.subtask, self.held = [], [], [], [], True
-        self.sim = None
-
-    def __call__(self, s):
-        self.sim = s
-        if s.ticked:
-            self.states.append(s.tick_state.copy())
-            self.actions.append(s.applied_ctrl.copy())
-            self.nominal.append(s.nominal_ctrl.copy())
-            self.subtask.append(s.subtask)
-        elif self.actions:
-            self.held &= bool(np.array_equal(s.applied_ctrl, self.actions[-1]))
 
 
 @pytest.mark.slow

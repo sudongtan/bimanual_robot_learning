@@ -6,7 +6,7 @@ Goal: collect scripted bimanual demos in sim of four primitive skills and two co
 
 ## Status
 
-The workcell, a scripted expert for all six tasks and the per-episode randomisation are built and validated. **Next step: recording data** (see [2data_collection.md](2data_collection.md)).
+The workcell, a scripted expert for all six tasks, the per-episode randomisation and the recorder are built and validated. **Next step: the step-0 recording batch** (see [2data_collection.md](2data_collection.md)).
 
 Validation, `python -m sim.validate 40` (40 random starts per arm and per target, all randomisation on, expert at 50 Hz as recorded):
 
@@ -151,9 +151,9 @@ python -m sim.validate 40 all eval      # held-out colours and phrasings
 | `sim/skills.py` | One scripted episode per task: `run_S1` … `run_S4`, `run_T1`, `run_T2` |
 | `sim/randomize.py` | `Randomization`: every randomisation factor; command templates |
 | `sim/validate.py` | Validation over random starts, per factor |
-| `sim/record.py` (to write) | Episode recorder, see `2data_collection.md` |
+| `sim/record.py` | Episode recorder: LeRobot dataset plus exact-replay states, see `2data_collection.md` |
 | `sim/evaluate.py` (to write) | Policy rollouts in sim under the evaluation conditions in the plan |
-| `tests/` | `test_workcell.py` (geometry, reach), `test_randomize.py` (randomisation), `test_tasks.py` (episodes) |
+| `tests/` | `test_workcell.py` (geometry, reach), `test_randomize.py` (randomisation, seeds), `test_tasks.py` (episodes, exact replay), `test_record.py` (recorder) |
 | `deprecated/` | The earlier design; ignore |
 
 ## Plan: data and training, step by step
