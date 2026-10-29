@@ -27,21 +27,25 @@ import numpy as np
 from sim.scene import DEMO_NOISE, DISTRACTORS, START_NOISE, TABLE_Z, Sim
 from sim.tasks import yaw_quat
 
-# Clearly saturated colours that stand out from the wooden table, the grey-blue drawer and the
-# white cabinet. Train and eval colours don't overlap, so eval can test unseen colours.
+# Every colour stands out from everything around the cube (median rendered RGB distance >= 0.45 from
+# the arms' yellow parts and black motors, the table, drawer, handle and cabinet, measured on A0
+# frames; 2data_collection.md, "Cube colours"). Yellow/orange (as the arms), black (as the handle and
+# motors), pink, lime and white failed. Train and eval colours don't overlap, and each eval colour
+# sits between training colours (>= 0.29 RGB distance from the nearest), so eval tests unseen colours,
+# not an unseen hue family. 6 and 4 colours, as before, so every seed draws the same start.
 TRAIN_COLOURS = {
     "red": (0.85, 0.20, 0.15),
-    "orange": (0.95, 0.55, 0.10),
-    "yellow": (0.95, 0.85, 0.15),
     "green": (0.20, 0.70, 0.25),
     "blue": (0.20, 0.45, 0.85),
-    "purple": (0.55, 0.30, 0.75),
+    "violet": (0.35, 0.15, 0.60),
+    "teal": (0.00, 0.50, 0.50),
+    "crimson": (0.75, 0.05, 0.30),
 }
 EVAL_COLOURS = {
-    "pink": (0.95, 0.45, 0.70),
+    "magenta": (0.85, 0.10, 0.65),
     "cyan": (0.15, 0.80, 0.85),
-    "lime": (0.65, 0.90, 0.20),
-    "black": (0.10, 0.10, 0.10),
+    "navy": (0.10, 0.15, 0.45),
+    "maroon": (0.50, 0.05, 0.10),
 }
 
 # Distractor zones (x range, y range of the centre), world frame: beside the cabinet and in the

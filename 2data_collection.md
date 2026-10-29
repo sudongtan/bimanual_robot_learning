@@ -1,7 +1,7 @@
 
 ## Next step: recording
 
-The recorder is written (`sim/record.py`) and tested on a few episodes; the step-0 batch (5 per variant) is next. The plan: record that batch, inspect it, fix the expert or recorder, then run the training pilot (plan step 1).
+The recorder is written (`sim/record.py`). The step-0 batch (A0, `data/a0`, 5 per variant) is recorded and checked: 100/100 successful, no action or label flags, but the check showed some cube colours blending into the scene, so the palette was replaced ("Cube colours" below). A0 is not used for training (step-0 batches are discarded; its seeds are recorded again in the full set), and it uses the old colours anyway; all training data is recorded fresh with the new palette. Next: the training pilot (plan step 1).
 
 ```
 python -m sim.record data/pilot --per-variant 5                  # step 0: 5 of each of the 20 variants
@@ -31,7 +31,7 @@ python -m sim.record data/s1a --variants S1:A --per-variant 50   # plan step 1
 5. **Composite sub-commands as per-frame labels. Hook done:** `sim.subtask` is 0, then 1 from the moment the first arm is back home (`test_composite_subtask_boundary`). A LeRobot episode has one `task` string, so keep the full T1/T2 command as the task and add a per-frame `subtask_index` (T1: 0 = S1 part, 1 = S4 part; T2: 0 = S3 part, 1 = S2 part) plus the frame where the first arm is back home. Don't cut a composite into two episodes: the second half wouldn't start from home. The boundary is also where the chained-primitives evaluation switches command (plan step 13).
 6. **Balance per command, not just per task × arm.** S1, S2, S3 and T2 have 2 commands each (arm, or direction); S4 and T1 have 6 (arm × target). Equal counts per task × arm leave each S4 command with a third of the episodes of an S1 command. Default: equal episodes per command, plus both start kinds of S2.
 
-**Checks on the first batch:**
+**Checks on the first batch** (`python -m sim.check_data data/a0`: check 1 runs in the recorder on every episode; this script runs 2–4 on the LeRobot dataset and writes `check/report.txt`, with every threshold breach listed under FLAGS, `check/episodes.json` and one contact sheet per episode in `check/sheets/`):
 1. **Replay:** play the recorded actions in a fresh sim from the recorded start state (each held for 10 steps) and confirm every recorded state matches exactly (as `test_replay_is_exact`) and the task still succeeds.
 2. **Images:** the cube is visible and not hidden by the arms; the wrist cameras see the cube, handle and drawer inside when it matters; colours and lighting look right.
 3. **Actions:** no jumps (watch the carry to the far-side S4/T1 targets), no long idle stretches, sensible gripper timing.
@@ -43,4 +43,33 @@ python -m sim.record data/s1a --variants S1:A --per-variant 50   # plan step 1
 
 **Open:**
 - Episode counts. Pilot: 25 per task and arm. Default for the full set: 50 per command (ACT used 50 sim demos per task; LIBERO has 50 per task, the set SmolVLA and π0 are fine-tuned on).
-- An automated render check (cube pixels and contrast at 480 × 640 and at 224 over many seeds). Match the cube by its segmentation ID, not its colour: lighting changes the rendered colour too much for a colour match.
+- Automated render check: done in `sim/check_data.py`: cube pixels at 480 × 640 and at 224, and contrast with each surround, with the cube matched by its segmentation ID (lighting changes the rendered colour too much for a colour match).
+
+**Cube colours (measured on A0).** A0's check flagged 9 of 100 episodes, all orange or yellow cubes, as low contrast with the arms. The SO-101's printed parts are yellow, and its motors and the drawer handle are black. To choose a palette, 23 candidate colours were rendered as the cube on A0's own frames (`python -m sim.colour_contrast data/a0`, report in `check/colours.txt`; one episode per variant, every 20th frame, each episode's lighting, overview camera). Each was measured as the RGB distance (0–1 per channel) between the cube's mean rendered colour and each surround, split by segmentation: the arms' yellow parts, their black motors, the table, drawer, handle and cabinet. A colour's score is its weakest surround (median over frames). Averaging over the whole arm, as the first check did, hid black: it differs a lot from the yellow parts but matches the motors.
+
+| Colour | Weakest surround | Contrast | Use |
+|---|---|---|---|
+| teal | handle | 0.74 | train |
+| violet | drawer | 0.68 | train |
+| indigo | handle | 0.68 | — |
+| magenta | table | 0.66 | eval |
+| crimson | table | 0.66 | train |
+| green | arm yellow | 0.60 | train (kept) |
+| cyan | drawer | 0.55 | eval (kept) |
+| blue | drawer | 0.54 | train (kept) |
+| maroon | handle | 0.52 | eval |
+| red | arm yellow | 0.48 | train (kept) |
+| navy | handle | 0.45 | eval |
+| purple | drawer | 0.42 | dropped (train) |
+| pink | drawer | 0.28 | dropped (eval) |
+| lime | arm yellow | 0.26 | dropped (eval) |
+| yellow | arm yellow | 0.19 | dropped (train) |
+| orange | arm yellow | 0.19 | dropped (train) |
+| black | handle (motors 0.13) | 0.08 | dropped (eval) |
+
+Also measured and rejected: brown 0.44, dark green 0.40, grey 0.26, sky 0.21, mint 0.16, white 0.10 (against the cabinet).
+
+- **Choice:** every colour scores ≥ 0.45. Train: red, green, blue, violet, teal, crimson. Eval: magenta, cyan, navy, maroon. Each eval colour lies between training colours: its nearest training colour is 0.29–0.37 away in nominal RGB (navy–violet is the closest pair; in the old palette the closest was 0.31). So the eval-colours condition still tests unseen colours, as before, not a whole unseen hue range. Splitting by hue family (blues and greens to train, reds to eval) would widen the gap to 0.54, but it would test a harder, different question.
+- **Same starts:** both palettes keep 6 and 4 colours, so each seed draws the same index and the same start, distractors and lighting. Only the colour changes.
+- **Reference:** held-out object colours as an evaluation shift follow The Colosseum (Pumacay et al. 2024), where object colour is one of the perturbation factors. Choosing the palette by measured contrast in the rendered scene, rather than by name, is our own step: the SO-101's yellow parts and black motors make the usual primary colours a poor fit.
+- **Check:** `check_data` reports each episode's weakest-surround contrast and flags it below `MIN_CONTRAST` = 0.4. On one episode per variant with the new palette (20 episodes): 0 flags, all successful. The lowest contrast is blue against the drawer, 0.42 (its median over the colour sweep was 0.54); the per-colour medians are red 0.47, green 0.59, violet 0.64, crimson 0.64, teal 0.80. The eval colours were measured in the sweep only (they are recorded with `split="eval"` at evaluation).

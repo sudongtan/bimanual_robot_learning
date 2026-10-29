@@ -182,10 +182,15 @@ def write_episode(ds, variant, result: dict, frames: dict, rand: RZ.Randomizatio
         renderer.close()
 
 
+def to_json(obj) -> str:
+    """One log line; numpy scalars and arrays (e.g. a bool from a numpy comparison) as plain JSON."""
+    return json.dumps(obj, default=lambda o: o.item() if isinstance(o, np.generic) else o.tolist())
+
+
 def git_commit() -> dict:
     def git(*a):
         return subprocess.run(["git", *a], capture_output=True, text=True, cwd=Path(__file__).parent).stdout.strip()
-    return {"commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain", "--", "sim"))}
+    return {"commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain", "--", "."))}  # cwd is sim/
 
 
 def parse_variants(spec: str) -> list[tuple]:
@@ -260,7 +265,7 @@ def record(root: Path, variants: list[tuple], n: int, rand: RZ.Randomization, im
     shutil.move(tmp / "states", side / "states")
     with open(side / "episodes.jsonl", "w") as log:
         for e in entries:
-            log.write(json.dumps({**e, "states": f"states/{e['states']}"}) + "\n")
+            log.write(to_json({**e, "states": f"states/{e['states']}"}) + "\n")
     (side / "info.json").write_text(json.dumps(
         {**git_commit(), "fps": FPS, "control_every": CONTROL_EVERY, "per_variant": n, "images": images,
          "randomization": asdict(rand), "variants": [list(v) for v in variants]}, indent=1))

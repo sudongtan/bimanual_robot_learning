@@ -6,7 +6,7 @@ Goal: collect scripted bimanual demos in sim of four primitive skills and two co
 
 ## Status
 
-The workcell, a scripted expert for all six tasks, the per-episode randomisation and the recorder are built and validated. **Next step: the step-0 recording batch** (see [2data_collection.md](2data_collection.md)).
+The workcell, a scripted expert for all six tasks, the per-episode randomisation, the recorder and the success checks (which score a policy the same way as the expert, `sim/episode.py`) are built and validated. **Next step: the step-0 recording batch** (see [2data_collection.md](2data_collection.md)).
 
 Validation, `python -m sim.validate 40` (40 random starts per arm and per target, all randomisation on, expert at 50 Hz as recorded):
 
@@ -94,7 +94,7 @@ Every factor is configured in `Randomization`; `Randomization()` is everything o
 | Demonstration noise | Physical | `demo_noise`: smooth, σ 0.008 rad (~3 mm at the fingertip), free-space moves only (as ACT's `inject_noise`, half size) |
 | Cube rotation | Physical | ±45° on the table; ±20° in the drawer (beyond ~25° no grasp in the drawer) |
 | Distractors | Physical | 0–2 round objects in the distractor zones; an episode fails if one moves > 5 mm |
-| Cube colour | Render-only | 6 train colours, 4 held-out eval colours; distractors never share the cube's colour |
+| Cube colour | Render-only | 6 train colours (red, green, blue, violet, teal, crimson), 4 held-out eval colours (magenta, cyan, navy, maroon), each chosen to stand out from the arms, table, drawer and cabinet (measured: `2data_collection.md`, "Cube colours"); distractors never share the cube's colour |
 | Lighting | Render-only | Main light direction, intensity and tint; headlight level |
 | Command wording | Label-only | 3 phrasings per task (`COMMANDS`): the first is canonical, the last is held out for eval |
 | Arm bases, cameras, table, mass, friction | — | Fixed |
@@ -118,6 +118,8 @@ It reads object positions from the simulator, as in ACT, ManiSkill and RoboTwin.
 
 The start (`reset`), the per-step monitor and the success check (`success`) don't use anything from the scripted expert, so a policy rollout is scored the same way as a demonstration (as LIBERO's and ManiSkill's success checks read only the simulator). `success` returns each check by name:
 
+**Why they are separate from the expert.** Each `run_*` used to draw its own start and compute `success` partly from the expert's own steps: whether a grasp plan was found, the cube's height at the moment the expert let go, and `pushed`, which is measured inside the expert's approach. A policy has none of these, so it would have been scored wrongly. A dropped cube and a pushed cube would never be caught, and nothing checked which arm did the work, since the expert uses the named arm by construction. The policy evaluation (`sim/evaluate.py`), the swap and stop tests, and any later reinforcement learning (a reward or a success signal per rollout, as in DPPO or SimpleVLA-RL fine-tuning in sim) all need one check that reads only the simulator, applied to the same starts as the demonstrations. Moving it out of the expert changed nothing for the expert: `sim.validate 40` gives 800/800 before and after, with the same start, command and contact and motion numbers in every episode, and every check passes.
+
 - **The task's condition**, from the Tasks table: drawer open or closed, cube upright in the drawer or within 2 cm of its target, and the extras listed there (S1: cube kept its place in the drawer; S3: drawer didn't move). S3 and T2 also need the cube set down, not dropped: it fell < 15 mm with no arm touching it (`DROPPED`). The expert releases ~5 mm above the floor (6–9 mm measured).
 - **Who did it.** In a primitive, the named arm touched its item (drawer or cube), and the other arm never left home (every joint < 0.1 rad from its start, `IDLE_MOVE`, the same threshold as the continue rate). In a composite, each arm touched its own step's item, and the first arm never touched the second step's. Without this, opening the drawer with arm B when told arm A would pass.
 - **For every task:** no arm-to-arm contact, no distractor moved > 5 mm.
@@ -135,6 +137,8 @@ Two checks apply only to demonstrations, in `skills.finish`: nothing pushed whil
 | Shared start scenes | So the command, not the scene, decides the task (see above) |
 | Primitives in inverse pairs, composites from them | Every primitive is part of a composite, so composition can be tested both ways (T1 and T2) |
 | S3 puts the cube in the drawer, not on a table spot | A table target lies in the strip the cube starts from (~16 × 5 cm, between the drawer handle and the arms' reach), so the start gave the target away: with three targets no start area could be ≥ 6 cm from all of them (1.9 cm² left) |
+| Success checks read only the simulator (`sim/episode.py`), not the expert | So a policy is scored exactly as a demonstration, by the same check the evaluation, swap tests and any later RL use (see Success checks) |
+| The success check includes who did it | The command names the arm, so "the drawer is open" isn't enough: the named arm must do the work and the other stay home. Without it the swap tests couldn't tell a policy that follows the arm in the command from one that uses whichever arm it likes |
 | No bar hand-off task | Its scene gave the task away (the bar was only on the table in that task), its start and target areas overlapped the cube's in the same strip, and it isn't built from the primitives. Two arms still work together in T1 and T2 |
 
 ## How to run
@@ -163,6 +167,8 @@ python -m sim.validate 40 all eval      # held-out colours and phrasings
 | `sim/randomize.py` | `Randomization`: every randomisation factor; command templates |
 | `sim/validate.py` | Validation over random starts, per factor |
 | `sim/record.py` | Episode recorder: LeRobot dataset plus exact-replay states, see `2data_collection.md` |
+| `sim/check_data.py` | First-batch checks on a recorded dataset (images, actions, labels), see `2data_collection.md` |
+| `sim/colour_contrast.py` | Cube colour sweep: contrast of each palette (and rejected) colour with its surroundings on a recorded dataset, see `2data_collection.md`, "Cube colours" |
 | `sim/evaluate.py` (to write) | Policy rollouts in sim under the evaluation conditions in the plan |
 | `tests/` | `test_workcell.py` (geometry, reach), `test_randomize.py` (randomisation, seeds), `test_tasks.py` (episodes, exact replay), `test_episode.py` (starts, success checks), `test_record.py` (recorder) |
 | `deprecated/` | The earlier design; ignore |

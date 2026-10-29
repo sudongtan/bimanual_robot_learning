@@ -95,7 +95,7 @@ def pick_cube(sim: Sim, arm: str, rec=None, grip_height: float = 0.02, jaw_perp=
         lift = sim.tip(arm).copy()
         lift[2] = max(lift[2], TABLE_Z + CARRY_Z)
         sim.move_line(arm, lift, 0.5, point=plan.point, on_step=rec)
-    return holding(sim, arm)
+    return bool(holding(sim, arm))
 
 
 def place_cube(sim: Sim, arm: str, xy, rec=None, point=None):

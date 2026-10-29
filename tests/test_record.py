@@ -11,12 +11,12 @@ from sim import record as R
 
 @pytest.mark.slow
 def test_record_and_read_back(tmp_path):
-    """Two S2 episodes (one per start kind) and one T2: the dataset holds only successful episodes,
+    """Two S2 episodes (one per start kind), two T2 and two S4 (whose result has `picked`, from numpy): the dataset holds only successful episodes,
     in order, with the right variant, subtask labels and command; the log and states files match."""
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
     root = tmp_path / "ds"
-    variants = [("S2", "A", None), ("T2", "B", None)]
+    variants = [("S2", "A", None), ("T2", "B", None), ("S4", "A", "left")]
     R.record(root, variants, 2, RZ.Randomization(), images=False, workers=2)
     log = [json.loads(line) for line in open(root / "sim" / "episodes.jsonl")]
     good = [e for e in log if e["success"]]
@@ -25,7 +25,7 @@ def test_record_and_read_back(tmp_path):
     assert all(e["seed"] in RZ.train_seeds(*e["variant"]) for e in log)
 
     ds = LeRobotDataset(R.REPO_ID, root=root)
-    assert ds.num_episodes == len(good) == 4
+    assert ds.num_episodes == len(good) == 6
     for e in good:
         ep = ds.meta.episodes[e["episode_index"]]
         assert ep["length"] == e["frames"]
