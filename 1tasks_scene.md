@@ -170,11 +170,49 @@ python -m sim.validate 40 all eval      # held-out colours and phrasings
 | `sim/check_data.py` | First-batch checks on a recorded dataset (images, actions, labels), see `2data_collection.md` |
 | `sim/colour_contrast.py` | Cube colour sweep: contrast of each palette (and rejected) colour with its surroundings on a recorded dataset, see `2data_collection.md`, "Cube colours" |
 | `sim/evaluate.py` | Policy rollouts in sim under the evaluation conditions in the plan (fixed horizon, success and stop rate) |
-| `sim/swap_action.py` | A copy of a dataset with `action` and `action_nominal` swapped, to train on the clean labels (plan step 1) |
+| `sim/dataset_view.py` | A training view of a recorded dataset: `--nominal` (train on `action_nominal`), `--variant-input` (adds the one-hot variant vector as `observation.environment_state`) |
+| `cloud/train.sh` | ACT or SmolVLA training on a rented CUDA GPU (LeRobot only; evaluation stays on the Mac) |
 | `tests/` | `test_workcell.py` (geometry, reach), `test_randomize.py` (randomisation, seeds), `test_tasks.py` (episodes, exact replay), `test_episode.py` (starts, success checks), `test_record.py` (recorder) |
 | `deprecated/` | The earlier design; ignore |
 
-## Plan: data and training, step by step
+## Minimal plan (active): one scene, S1 and T1
+
+The full plan below records all 20 variants before reaching the VLA. This version reaches it with one start scene, **drawer closed with the cube inside**, shared by S1 and T1, as LIBERO-Goal puts all its tasks in one scene so only the instruction picks the goal. The rest of the full plan is on hold, not dropped: the expert and tests for every task stay as they are.
+
+| Task | Variants | Example command |
+|---|---|---|
+| S1 open drawer | arm A, arm B | "open the drawer with arm B" |
+| T1 open, then take out | opener A or B × target left or right | "open the drawer with arm A, then take the cube out and put it on the right of the table with arm B" |
+
+6 variants, 50 episodes each (300). One scene still shows every point of the project:
+
+| Point | Where it shows |
+|---|---|
+| The command picks the **arm** | S1 arm A vs arm B, same scene |
+| The command picks the **task** | S1 vs T1, same scene |
+| The command picks the **target** | T1 left vs right, same scene |
+| **Stop or continue** | The end of S1 is the middle of T1 (drawer open, cube inside, arms home): stop rate under S1, continue rate under T1. A policy that ignores the command fails one of the two |
+| **Hand-over between arms** | T1: one arm opens, the other takes the cube out |
+| **Swap test** | Every variant is evaluated on the same `EVAL_SEEDS`, so the same scene under a different command is already in the results |
+| **Language, unseen colours, unseen wording** | The VLA under all three evaluation conditions |
+
+| Step | Record | Train | Check |
+|---|---|---|---|
+| 1 | S1 arm A: 50 | ACT on S1 arm A, on `action` and on `action_nominal` | As step 1 of the full plan: ≥ 80% on the train condition; keep the better action label |
+| 2 | S1 arm B: 50; T1 opener A/B × left/right: 200 | — | The first-batch checks (`sim.check_data`) |
+| 3 | — | ACT with the variant input (one-hot, as Meta-World MT10/MT50), all 6 variants | Success per variant, swap test, stop rate (S1) and continue rate (T1) |
+| 4 | — | SmolVLA fine-tuned on the same 300 episodes, with the commands | Same, under the train, eval-colours and eval-phrasing conditions. The gap to step 3 on the train condition is the cost of reading language |
+
+**Imbalance:** T1 has two thirds of the scene's episodes, so a policy that always continues is rewarded. Sample S1 and T1 equally during training (as in the full plan), or record 100 per S1 arm.
+
+**On hold:** S2, S3, S4 and T2 (their scenes and data); the middle target; the chained-primitive and zero-shot composition tests (steps 13–14, which need the S4 command; the natural next addition is S4 plus S2 from the fully-open scene, so that scene is shared too); Diffusion Policy, π0 and the per-variant T1 baseline. What the minimal version gives up: the hand-over is shown inside one command (T1), not as two primitive commands chained.
+
+**Code for the minimal plan (written and checked end to end):**
+- Variant input: `RZ.variant_vector` (11 dims, `VARIANT_DIMS`), added to a dataset by `python -m sim.dataset_view SRC DST --variant-input` (with `--nominal` too if step 1 picks the clean labels) as `observation.environment_state`, which LeRobot's ACT takes as an extra encoder input, unnormalised. `sim/evaluate.py` supplies it when the policy has it. Checked: ACT trains on it, and a rollout gets the vector.
+- Continue rate in `sim/evaluate.py`: once T1's drawer is open (or T2's cube is in), the second arm leaves home before the horizon ends. `test_expert_commands_succeed_in_rollout` replays S1 (stops) and T1 (continues).
+- SmolVLA: `bash cloud/train.sh smolvla DATASET OUT` fine-tunes `lerobot/smolvla_base` (LeRobot's recipe: batch 64, 20k steps), mapping our cameras onto its `camera1`–`camera3`. Checked on the Mac (2 steps on CPU, then a rollout through `sim/evaluate.py`); the real run needs a CUDA GPU (on the CPU one rollout takes ~4 min).
+
+## Full plan (on hold beyond the minimal version): data and training, step by step
 
 A **variant** is one task with one arm and one target, i.e. one exact command (in T1 the arm is the opener, in T2 the placer). There are 20: S1 2 (arm), S2 2 (arm), S3 2 (arm), S4 6 (arm × target), T1 6 (direction × target), T2 2 (direction).
 

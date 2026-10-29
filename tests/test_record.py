@@ -36,3 +36,14 @@ def test_record_and_read_back(tmp_path):
         np.testing.assert_allclose(first["action"].numpy(), states["action"][0], atol=1e-6)
         if e["variant"][0] == "T2":
             assert int(first["subtask_index"]) == 0 and int(last["subtask_index"]) == 1
+
+    # the training view (sim/dataset_view.py): clean labels as `action`, the variant vector as environment state
+    from sim.dataset_view import ENV, view
+
+    view(root, tmp_path / "view", nominal=True, variant_input=True)
+    v = LeRobotDataset(R.REPO_ID, root=tmp_path / "view")
+    assert v.num_episodes == ds.num_episodes and ENV in v.meta.stats
+    for e in good:
+        i = v.meta.episodes[e["episode_index"]]["dataset_from_index"]
+        np.testing.assert_allclose(v[i]["action"].numpy(), ds[i]["action_nominal"].numpy())
+        np.testing.assert_array_equal(v[i][ENV].numpy(), RZ.variant_vector(*e["variant"]))

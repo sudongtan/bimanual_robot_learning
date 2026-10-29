@@ -70,6 +70,18 @@ HEADLIGHT_AMBIENT = (0.2, 0.4)  # scene default 0.3
 TARGETS = ("left", "middle", "right")
 VARIANTS = tuple((task, arm, target) for task in ("S1", "S2", "S3", "S4", "T1", "T2") for arm in ("A", "B")
                  for target in (TARGETS if task in ("S4", "T1") else (None,)))
+# The variant input for ACT/DP (1tasks_scene.md, "Variant input"): one-hot task, arm (the opener in T1, the
+# placer in T2) and target (all zero for tasks without one), as Meta-World MT10/MT50 adds a task ID.
+VARIANT_DIMS = ("S1", "S2", "S3", "S4", "T1", "T2", "A", "B") + TARGETS
+
+
+def variant_vector(task: str, arm: str, target: str | None = None) -> np.ndarray:
+    v = np.zeros(len(VARIANT_DIMS), np.float32)
+    for x in (task, arm, target):
+        if x is not None:
+            v[VARIANT_DIMS.index(x)] = 1.0
+    return v
+
 
 # Episode seeds. A seed fixes the whole start (a run_* draws it from the seed alone), so the same seed gives the
 # same start in every task that shares the scene. Training: every episode gets its own seed, so every recorded
