@@ -1,12 +1,12 @@
 # Bimanual SO-101 workcell: tasks, scene and status
 
-_Last updated: 2026-10-28_
+_Last updated: 2026-10-29_
 
 Goal: collect scripted bimanual demos in sim of four primitive skills and two composites built from them, each composite split across the two arms. Use them to (1) train imitation policies (ACT/DP) evaluated in sim, one policy with a one-hot variant input (task × arm × target, 20 variants), checked first with a few per-variant policies, then (2) fine-tune a pretrained VLA (SmolVLA/π0) on all tasks with varied instructions, evaluated on held-out start states and paraphrases. Then test composition: running a composite as its two primitive commands in a row, with and without composite training data.
 
 ## Status
 
-The workcell, a scripted expert for all six tasks, the per-episode randomisation, the recorder and the success checks (which score a policy the same way as the expert, `sim/episode.py`) are built and validated. **Next step: the step-0 recording batch** (see [2data_collection.md](2data_collection.md)).
+The workcell, a scripted expert for all six tasks, the per-episode randomisation, the recorder and the success checks (which score a policy the same way as the expert, `sim/episode.py`) are built and validated. The step-0 batch is recorded and checked ([2data_collection.md](2data_collection.md)). **Now: plan step 1** (S1 arm A, 50 episodes at 240 × 320, ACT trained on `action` and on `action_nominal`); `sim/evaluate.py` runs the rollouts.
 
 Validation, `python -m sim.validate 40` (40 random starts per arm and per target, all randomisation on, expert at 50 Hz as recorded):
 
@@ -169,7 +169,8 @@ python -m sim.validate 40 all eval      # held-out colours and phrasings
 | `sim/record.py` | Episode recorder: LeRobot dataset plus exact-replay states, see `2data_collection.md` |
 | `sim/check_data.py` | First-batch checks on a recorded dataset (images, actions, labels), see `2data_collection.md` |
 | `sim/colour_contrast.py` | Cube colour sweep: contrast of each palette (and rejected) colour with its surroundings on a recorded dataset, see `2data_collection.md`, "Cube colours" |
-| `sim/evaluate.py` (to write) | Policy rollouts in sim under the evaluation conditions in the plan |
+| `sim/evaluate.py` | Policy rollouts in sim under the evaluation conditions in the plan (fixed horizon, success and stop rate) |
+| `sim/swap_action.py` | A copy of a dataset with `action` and `action_nominal` swapped, to train on the clean labels (plan step 1) |
 | `tests/` | `test_workcell.py` (geometry, reach), `test_randomize.py` (randomisation, seeds), `test_tasks.py` (episodes, exact replay), `test_episode.py` (starts, success checks), `test_record.py` (recorder) |
 | `deprecated/` | The earlier design; ignore |
 
@@ -194,7 +195,7 @@ ACT/DP with the one-hot input never sees the command, so it gets the first two c
 | **Stop rate** | S1 (or S3) | The task succeeds, and in the last 2 s of the horizon no joint of either arm moves > 0.05 rad and the cube and drawer move < 5 mm (the expert's hold check) |
 | **Continue rate** | T1 (or T2) | After the first arm finishes its step, the second arm leaves home (a joint > 0.1 rad from its start) before the horizon ends |
 
-A policy that ignores the command does well on one of the two and badly on the other; one that follows it does well on both. There is no policy evaluation script yet (`sim/evaluate.py`, to write); it builds on `reset` and `success` in `sim/episode.py`. The second and third conditions are `Randomization(colours_split="eval")` and `Randomization(wording_split="eval")` (`split="eval"` holds out both).
+A policy that ignores the command does well on one of the two and badly on the other; one that follows it does well on both. `sim/evaluate.py` runs the rollouts (train and eval-colours conditions, and the stop rate; the continue rate is still to add), built on `reset` and `success` in `sim/episode.py`: `python -m sim.evaluate CKPT --variants S1:A --condition train`. `test_expert_commands_succeed_in_rollout` drives it with the expert's own commands to check the loop. The second and third conditions are `Randomization(colours_split="eval")` and `Randomization(wording_split="eval")` (`split="eval"` holds out both).
 
 **Variant input (one-hot, 11 dims)**, appended to `observation.state` for ACT/DP: task (6: S1, S2, S3, S4, T1, T2) + arm (2: A, B; the opener in T1, the placer in T2) + target (3: left, middle, right; all zero for S1, S2, S3, T2). The recorder saves task, arm and target per episode, so the vector can be built at training time.
 

@@ -1,43 +1,44 @@
 # Bimanual SO-101: does the command choose the arm?
 
-A simulated two-arm SO-101 workcell (MuJoCo) where **the command is the only thing that tells the policy what to do**: which task, which arm, and where the cube goes. The start scenes are designed and audited so that none of these can be read off the scene. The workcell is used to measure how well imitation policies (ACT, Diffusion Policy) and a fine-tuned vision-language-action model follow commands, including when control passes from one arm to the other.
+A simulated two-arm SO-101 workcell (MuJoCo) where **the command is the only thing that tells the policy what to do**: which task, which arm, and where the cube goes. Nothing in the start scene gives these away, so a policy can only succeed by following the command. The workcell measures how well imitation policies (ACT, Diffusion Policy) and a fine-tuned vision-language-action model do that, including when control passes from one arm to the other.
 
-*Status: the workcell, scripted expert, randomisation and recorder are built and validated. Recording the data and training are next; no policy results yet.*
+**Why this matters.** A high success rate doesn't show that a policy read the instruction: if a scene only ever appears with one task, the policy can learn the scene and ignore the command, and LIBERO-Plus found vision-language-action models that scored almost the same with the instruction removed. Recent single-arm benchmarks (InstructMove, LangSwitch) fix this by sharing scenes across tasks, so only the text picks the goal. With two arms the command can also name which arm acts, but in existing bimanual setups the scene usually gives that away: in BiDex-100 the named arm is on its object's side, and in ALOHA and RoboTwin the task or the object's side decides the arm. Here every task can be done by either arm from the same start scenes, and the composites hand control from one arm to the other, so the arm, task and target can only come from the command. Details and references: [0background.md](0background.md).
 
-## Purpose
+## Tasks
 
-A policy's success rate doesn't show whether it read the instruction. If a scene only ever appears with one task, the policy can learn "this scene means that task" and ignore the command. [LIBERO-Plus](https://arxiv.org/abs/2510.13626) found exactly this: some vision-language-action models scored almost the same with the instruction removed. Recent benchmarks answer by making the text indispensable. [InstructMove](https://arxiv.org/abs/2608.22990) puts several feasible goals in each scene so only the instruction picks one, and [LangSwitch](https://arxiv.org/abs/2608.14822) (introduced with the CoRe recovery method) shares one scene across skills and switches instructions mid-episode.
+Six tasks, each doable by either arm from the same start scenes (20 command variants in all):
 
-These are single-arm. With two arms there is one more thing the command can specify: **which arm acts**. Bimanual benchmarks such as [BiDex-100](https://arxiv.org/abs/2610.25459) and Bimanual RLBench write arm-specific instructions, but an arm-specific instruction only tests command-following if the scene can't also give the arm away. In BiDex-100 the named arm is on the same side as its object ("with the left arm use the left hammer"). In ALOHA and RoboTwin, which arm acts is usually fixed by the task or by which side the object is on.
+| | Task | Example command |
+|---|---|---|
+| S1 | Open drawer | "open the drawer with arm A" |
+| S2 | Close drawer | "close the drawer with arm B" |
+| S3 | Cube into drawer | "put the cube in the drawer with arm A" |
+| S4 | Cube out of drawer | "take the cube out of the drawer and put it on the left of the table with arm B" |
+| T1 | Open, then take out (two arms) | "open the drawer with arm A, then take the cube out and put it on the right of the table with arm B" |
+| T2 | Put in, then close (two arms) | "put the cube in the drawer with arm B, then close the drawer with arm A" |
 
-This project asks:
+## Status
 
-> **When nothing in the scene says which task, which arm or which target, how well do policies follow the command, and does that hold when control passes from one arm to the other?**
+- **Built and validated:** the workcell, a scripted expert for all six tasks (800/800 successful on random starts), randomisation, the recorder, data checks, and policy evaluation in sim.
+- **Now:** plan step 1, ACT on "open the drawer with arm A" (50 demonstrations), trained on the commands with and without demonstration noise.
+- **No policy results yet.**
 
-To make the command the only signal:
+## Quick start
 
-- **The command names the arm.** Every task can be done by either arm, from the same start scenes.
-- **Every start scene is shared** by at least two tasks.
-- **Item starts never depend on the target.** Every start-state factor was audited for any dependence on task, arm or target.
+Use the project's `.venv` Python.
 
-The tasks are four primitives (open the drawer, close it, put the cube in, take it out to the left, middle or right of the table) and two composites that hand over between arms: one arm opens the drawer and the other takes the cube out, or one arm puts the cube in and the other closes the drawer.
+```
+python -m pytest tests -m "not slow"                                  # fast checks, ~40 s
+python -m sim.validate 40                                             # scripted expert on random starts
+python -m sim.record data/s1a --variants S1:A --per-variant 50        # record demonstrations (LeRobot dataset)
+python -m sim.check_data data/s1a                                     # check a recording
+python -m sim.evaluate CKPT --variants S1:A --condition train         # evaluate a trained policy in sim
+```
 
-The same demonstrations train two kinds of policy:
+## Documents
 
-- **ACT and Diffusion Policy with a one-hot input** for task, arm and target, the way Meta-World MT10/MT50 adds a task ID. The policy is told exactly what to do.
-- **A fine-tuned vision-language-action model** (SmolVLA, then π0 if compute allows), which has to read the command in natural language.
-
-Both are evaluated with unseen colours, and the VLA also with unseen wording, each change measured on its own, plus:
-
-- **Swap tests:** keep the scene, change only the task, arm or target in the command, and check that the behaviour follows the command.
-- **Stop tests:** after "open the drawer", the scene is the start of "take the cube out". Does the policy stop because of the command, or carry on because of the scene? Every demonstration ends with a recorded 2 s hold at home, so stopping is in the training data, and rollouts run past the demonstration length so a policy that carries on is caught.
-- **Hand-over tests:** run a composite as two primitive commands in a row, switching arms between them, and see how much success is lost at the switch. For T1 the second command starts from a scene it was trained on; for T2 it doesn't (the drawer is partly open with the cube inside, which no close-the-drawer demo starts from), so T2's loss also includes an unseen start.
-
-## Scope
-
-- **The arms act in turn, never at the same time.** The composites pass control from one arm to the other; there is no simultaneous coordination such as a hand-off.
-- **The demonstrations are scripted** from simulator state, so they are cleaner and more consistent than human teleoperation.
-- **This is a small, controlled testbed** (six tasks, 20 command variants), not a benchmark comparable to LIBERO or RoboTwin.
-- **Simulation only.**
-
-The tasks, scene and design decisions are in [1tasks_scene.md](1tasks_scene.md); the recording design is in [2data_collection.md](2data_collection.md).
+| File | Contents |
+|---|---|
+| [0background.md](0background.md) | Motivation, related work, the research question, what is evaluated, scope |
+| [1tasks_scene.md](1tasks_scene.md) | Tasks, scene, randomisation, the scripted expert, success checks, files, and the step-by-step plan |
+| [2data_collection.md](2data_collection.md) | Recording design, data checks, cube colours |

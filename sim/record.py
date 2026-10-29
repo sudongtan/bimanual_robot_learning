@@ -15,7 +15,7 @@ renders the three cameras from the recorded states and writes the frames.
 Written under `root`:
     LeRobot dataset    successful episodes only, so it trains as is. Per frame: observation.state (12 actuated
                        joints), action (the command sent, with demonstration noise), action_nominal (without),
-                       observation.images.{overview,left_wrist,right_wrist} (480 x 640), subtask_index
+                       observation.images.{overview,left_wrist,right_wrist} (HEIGHT x WIDTH, 240 x 320 by default), subtask_index
                        (composites: 0, then 1 once the first arm is home), variant_index (into VARIANTS, for
                        the one-hot input); the episode's task is its command.
     sim/episodes.jsonl every episode run, failed ones too: variant, seed, the run_* result (success, command,
@@ -45,7 +45,7 @@ from sim.scene import CONTROL_EVERY, STATE_SPEC
 from sim.validate import config
 
 FPS = 50
-HEIGHT, WIDTH = 480, 640  # as ACT/ALOHA (2data_collection.md, design point 4)
+HEIGHT, WIDTH = 240, 320  # half ACT/ALOHA's 480 x 640, for training speed (2data_collection.md, design point 4); --size
 CAMERAS = {"overview": "overview", "left_wrist": "left/wrist_cam", "right_wrist": "right/wrist_cam"}
 REPO_ID = "local/bimanual_so101"
 ROBOT_TYPE = "bimanual_so101_sim"
@@ -134,7 +134,7 @@ def replay_matches(model, frames: dict) -> bool:
     return True
 
 
-def features(sim, images: bool) -> dict:
+def features(sim, images: bool, size=(HEIGHT, WIDTH)) -> dict:
     joints = [sim.model.actuator(i).name for i in range(sim.model.nu)]
     vec = lambda dtype, names: {"dtype": dtype, "shape": (len(names),), "names": names}
     f = {"observation.state": vec("float32", joints), "action": vec("float32", joints),
@@ -142,7 +142,7 @@ def features(sim, images: bool) -> dict:
          "subtask_index": {"dtype": "int64", "shape": (1,), "names": None},
          "variant_index": {"dtype": "int64", "shape": (1,), "names": None}}
     for key in CAMERAS if images else ():
-        f[f"observation.images.{key}"] = {"dtype": "video", "shape": (HEIGHT, WIDTH, 3),
+        f[f"observation.images.{key}"] = {"dtype": "video", "shape": (*size, 3),
                                           "names": ["height", "width", "channels"]}
     return f
 
@@ -152,7 +152,8 @@ def joint_qpos(sim) -> np.ndarray:
     return np.array([sim.model.jnt_qposadr[sim.model.actuator_trnid[i, 0]] for i in range(sim.model.nu)])
 
 
-def write_episode(ds, variant, result: dict, frames: dict, rand: RZ.Randomization, images: bool):
+def write_episode(ds, variant, result: dict, frames: dict, rand: RZ.Randomization, images: bool,
+                  size=(HEIGHT, WIDTH)):
     """Rebuild the episode's model (colours and lighting come from the seed), check the replay, then
     render each frame from its recorded state and add it to the dataset."""
     sim, _ = K.new_sim(result["seed"], rand)
@@ -161,7 +162,7 @@ def write_episode(ds, variant, result: dict, frames: dict, rand: RZ.Randomizatio
         raise RuntimeError(f"replay does not match the recording: {variant} seed {result['seed']}")
     qadr = joint_qpos(sim)
     vis = mujoco.MjData(model)
-    renderer = mujoco.Renderer(model, HEIGHT, WIDTH) if images else None
+    renderer = mujoco.Renderer(model, *size) if images else None
     v = RZ.VARIANTS.index(variant)
     for k, state in enumerate(frames["state"]):
         mujoco.mj_setState(model, vis, state, STATE_SPEC)
@@ -210,19 +211,20 @@ def _write_shard(job) -> int:
     """Write consecutive successful episodes (each loaded from its states file) as one small dataset."""
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
-    shard, entries, states_dir, rand, images = job
+    shard, entries, states_dir, rand, images, size = job
     sim, _ = K.new_sim(0, rand)
-    ds = LeRobotDataset.create(f"local/{shard.name}", fps=FPS, features=features(sim, images), root=shard,
+    ds = LeRobotDataset.create(f"local/{shard.name}", fps=FPS, features=features(sim, images, size), root=shard,
                                robot_type=ROBOT_TYPE, use_videos=True, image_writer_threads=len(CAMERAS) if images else 0)
     for e in entries:
         with np.load(states_dir / e["states"]) as f:
             frames = dict(f)
-        write_episode(ds, tuple(e["variant"]), e, frames, rand, images)
+        write_episode(ds, tuple(e["variant"]), e, frames, rand, images, size)
     ds.finalize()
     return len(entries)
 
 
-def record(root: Path, variants: list[tuple], n: int, rand: RZ.Randomization, images: bool = True, workers=None):
+def record(root: Path, variants: list[tuple], n: int, rand: RZ.Randomization, images: bool = True, workers=None,
+           size=(HEIGHT, WIDTH)):
     """Two passes. 1: the expert walks each variant's seeds (in parallel) and every episode's frames are
     saved. 2: the successful episodes, in order, are split into one consecutive chunk per worker; each
     worker checks the replay, renders and writes a small dataset (rendering is ~16 ms per camera image,
@@ -255,7 +257,7 @@ def record(root: Path, variants: list[tuple], n: int, rand: RZ.Randomization, im
             e["episode_index"] = i
         chunks = [c.tolist() for c in np.array_split(np.array(good, dtype=object), min(workers, len(good)))]
         shards = [tmp / f"shard{i:03d}" for i in range(len(chunks))]
-        jobs = [(shard, chunk, tmp / "states", rand, images) for shard, chunk in zip(shards, chunks)]
+        jobs = [(shard, chunk, tmp / "states", rand, images, size) for shard, chunk in zip(shards, chunks)]
         print(f"rendering and writing {len(good)} episodes in {len(jobs)} parts", flush=True)
         list(pool.map(_write_shard, jobs))
 
@@ -267,7 +269,7 @@ def record(root: Path, variants: list[tuple], n: int, rand: RZ.Randomization, im
         for e in entries:
             log.write(to_json({**e, "states": f"states/{e['states']}"}) + "\n")
     (side / "info.json").write_text(json.dumps(
-        {**git_commit(), "fps": FPS, "control_every": CONTROL_EVERY, "per_variant": n, "images": images,
+        {**git_commit(), "fps": FPS, "control_every": CONTROL_EVERY, "per_variant": n, "images": images, "image_size": list(size),
          "randomization": asdict(rand), "variants": [list(v) for v in variants]}, indent=1))
     shutil.rmtree(tmp)
 
@@ -280,8 +282,10 @@ def main():
     p.add_argument("--factors", default="all", help="randomisation factors, as in sim.validate ('all', 'none', ...)")
     p.add_argument("--no-images", action="store_true", help="skip rendering (states can be re-rendered later)")
     p.add_argument("--workers", type=int, default=None)
+    p.add_argument("--size", default=f"{HEIGHT}x{WIDTH}", help="camera image height x width, e.g. 480x640")
     a = p.parse_args()
-    record(a.root, parse_variants(a.variants), a.per_variant, config(a.factors), not a.no_images, a.workers)
+    size = tuple(int(x) for x in a.size.split("x"))
+    record(a.root, parse_variants(a.variants), a.per_variant, config(a.factors), not a.no_images, a.workers, size)
 
 
 if __name__ == "__main__":
