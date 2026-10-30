@@ -13,6 +13,8 @@
                    input, unnormalised, as Meta-World MT10/MT50 adds a task ID. sim/evaluate.py supplies
                    it in rollouts when the policy has it.
 
+Every view, and every recording (sim/record.py), also gets STD_FLOOR: see floor_std.
+
 The videos and the recorder's own files (`sim/`) are linked, not copied.
 """
 
@@ -32,6 +34,23 @@ from sim import randomize as RZ
 A, B = "action", "action_nominal"
 ENV = "observation.environment_state"
 QUANTILES = (0.01, 0.10, 0.50, 0.90, 0.99)
+# rad; the smallest std the normaliser divides by. A joint that never moves in a dataset (the idle arm's
+# gripper in S1: std 7e-9) otherwise turns physics jitter of ~3e-7 rad into normalised inputs of 15-50, and
+# the network can tell episodes apart by it: low loss on recorded frames, failure in closed loop (plan step 1).
+# The smallest real spread is 0.017 (start noise), so 0.01 changes nothing that varies. Diffusion Policy's
+# normaliser likewise treats near-constant dimensions as constant instead of dividing by their range.
+STD_FLOOR = 0.01
+FLOORED = ("observation.state", A, B)
+
+
+def floor_std(root: Path, floor: float = STD_FLOOR):
+    """Raise the std of the joint features in `root`'s meta/stats.json (what LeRobot normalises with) to `floor`."""
+    path = root / "meta" / "stats.json"
+    stats = json.loads(path.read_text())
+    for k in FLOORED:
+        if k in stats:
+            stats[k]["std"] = np.maximum(stats[k]["std"], floor).tolist()
+    path.write_text(json.dumps(stats, indent=4))
 
 
 def swap_name(name: str) -> str:
@@ -88,6 +107,7 @@ def view(src: Path, dst: Path, nominal: bool, variant_input: bool):
         meta[ENV] = stats(np.concatenate(env_all))
         info["features"][ENV] = {"dtype": "float32", "shape": [len(RZ.VARIANT_DIMS)], "names": list(RZ.VARIANT_DIMS)}
     (dst / "meta" / "stats.json").write_text(json.dumps(meta, indent=4))
+    floor_std(dst)
     (dst / "meta" / "info.json").write_text(json.dumps(info, indent=4))
     shutil.copy(src / "meta" / "tasks.parquet", dst / "meta" / "tasks.parquet")
     for name in ("videos", "sim"):

@@ -60,13 +60,17 @@ CONDITIONS = {"train": RZ.Randomization(),
               "eval_wording": RZ.Randomization(wording_split="eval")}
 
 
-def load_policy(path: Path, device: str):
-    """A LeRobot checkpoint (`pretrained_model` directory) with its pre- and post-processors."""
+def load_policy(path: Path, device: str, temporal_ensemble: float | None = None):
+    """A LeRobot checkpoint (`pretrained_model` directory) with its pre- and post-processors. ACT only:
+    `temporal_ensemble` predicts a chunk every frame and averages the overlapping predictions with weights
+    exp(-coeff * i) (ACT's temporal ensembling, used for its sim results; Zhao et al. 2023 use 0.01)."""
     from lerobot.configs.policies import PreTrainedConfig
     from lerobot.policies.factory import get_policy_class, make_pre_post_processors
 
     cfg = PreTrainedConfig.from_pretrained(path)
     cfg.device = device
+    if temporal_ensemble is not None:
+        cfg.temporal_ensemble_coeff, cfg.n_action_steps = temporal_ensemble, 1
     policy = get_policy_class(cfg.type).from_pretrained(path, config=cfg)
     policy.eval()
     # Render at the training size: ACT/DP keep the dataset's image shape (C, H, W); SmolVLA keeps its own camera
@@ -128,7 +132,9 @@ def rollout(policy, pre, post, variant, seed: int, rand: RZ.Randomization, video
              and np.linalg.norm(items_tail[:, :3] - items_tail[0, :3], axis=1).max() < E.PUSHED
              and np.abs(items_tail[:, 3] - items_tail[0, 3]).max() < E.PUSHED)
     result = {"variant": list(variant), "seed": seed, "command": start["command"],
-              "cube_colour": start["scene"].get("cube_colour"), "success": ok, "checks": checks}
+              "cube_colour": start["scene"].get("cube_colour"), "success": ok, "checks": checks,
+              # mm; how far the cube moved in the drawer (cube_kept_place fails above E.PUSHED)
+              "cube_slide_mm": 1000 * float(np.linalg.norm(E.cube_in_drawer_frame(sim) - start["cube_drawer_xy"]))}
     if variant[0] in STOP_TASKS:
         result["stopped"] = bool(ok and still)
     if variant[0] in FIRST_STEP_DONE:
@@ -142,21 +148,27 @@ def main():
     p.add_argument("--variants", default="all", help="as sim.record, e.g. S1:A or S4:B:left")
     p.add_argument("--condition", choices=CONDITIONS, default="train")
     p.add_argument("--episodes", type=int, default=50, help="rollouts per variant (the first EVAL_SEEDS)")
+    p.add_argument("--train-seeds", action="store_true",
+                   help="diagnostic: the variant's training seeds instead (starts the policy was trained on)")
     p.add_argument("--videos", type=int, default=0, help="save the overview of the first N rollouts per variant")
     p.add_argument("--out", type=Path, help="default: <checkpoint>/../eval")
     p.add_argument("--device", default="mps" if torch.backends.mps.is_available() else "cpu")
+    p.add_argument("--temporal-ensemble", type=float, default=None, metavar="COEFF",
+                   help="ACT: temporal ensembling with this coefficient (ACT used 0.01); default: run each chunk open loop")
     a = p.parse_args()
 
     out = (a.out or a.checkpoint.parent / "eval") / a.condition
     out.mkdir(parents=True, exist_ok=True)
-    policy, pre, post = load_policy(a.checkpoint, a.device)
+    policy, pre, post = load_policy(a.checkpoint, a.device, a.temporal_ensemble)
     rand = CONDITIONS[a.condition]
-    summary = {"checkpoint": str(a.checkpoint), "condition": a.condition, "variants": {}}
+    summary = {"checkpoint": str(a.checkpoint), "condition": a.condition, "temporal_ensemble": a.temporal_ensemble,
+               "train_seeds": a.train_seeds, "variants": {}}
     with open(out / "episodes.jsonl", "w") as log:
         for variant in R.parse_variants(a.variants):
             name = ":".join(x for x in variant if x)
             results = []
-            for k, seed in enumerate(RZ.EVAL_SEEDS[: a.episodes]):
+            seeds = RZ.train_seeds(*variant) if a.train_seeds else RZ.EVAL_SEEDS
+            for k, seed in enumerate(seeds[: a.episodes]):
                 t = time.time()
                 r, frames = rollout(policy, pre, post, variant, seed, rand, video=k < a.videos)
                 if frames:
@@ -169,10 +181,11 @@ def main():
                 print(f"{name} seed {seed}: {'success' if r['success'] else 'fail ' + ','.join(failed)}"
                       f"{'' if 'stopped' not in r else ', stopped' if r['stopped'] else ', did not stop'}"
                       f"{'' if 'continued' not in r else ', continued' if r['continued'] else ', did not continue'}"
-                      f" ({time.time() - t:.0f} s)",
+                      f", cube slid {r['cube_slide_mm']:.1f} mm ({time.time() - t:.0f} s)",
                       flush=True)
             s = {"episodes": len(results), "success": float(np.mean([r["success"] for r in results])),
-                 "failed_checks": {c: sum(not r["checks"][c] for r in results) for c in results[0]["checks"]}}
+                 "failed_checks": {c: sum(not r["checks"][c] for r in results) for c in results[0]["checks"]},
+                 "cube_slide_mm_median": float(np.median([r["cube_slide_mm"] for r in results]))}
             if variant[0] in STOP_TASKS:
                 s["stop"] = float(np.mean([r["stopped"] for r in results]))
             if variant[0] in FIRST_STEP_DONE:

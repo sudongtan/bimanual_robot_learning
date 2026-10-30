@@ -26,6 +26,10 @@ def test_record_and_read_back(tmp_path):
 
     ds = LeRobotDataset(R.REPO_ID, root=root)
     assert ds.num_episodes == len(good) == 6
+    # no joint is normalised by less than STD_FLOOR (the idle arm's gripper never moves)
+    from sim.dataset_view import STD_FLOOR
+    for k in ("observation.state", "action", "action_nominal"):
+        assert ds.meta.stats[k]["std"].min() >= STD_FLOOR - 1e-6
     for e in good:
         ep = ds.meta.episodes[e["episode_index"]]
         assert ep["length"] == e["frames"]

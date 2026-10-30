@@ -41,6 +41,7 @@ import numpy as np
 
 from sim import randomize as RZ
 from sim import skills as K
+from sim.dataset_view import STD_FLOOR, floor_std
 from sim.scene import CONTROL_EVERY, STATE_SPEC
 from sim.validate import config
 
@@ -262,6 +263,7 @@ def record(root: Path, variants: list[tuple], n: int, rand: RZ.Randomization, im
         list(pool.map(_write_shard, jobs))
 
     aggregate_datasets([f"local/{s.name}" for s in shards], REPO_ID, roots=shards, aggr_root=root)
+    floor_std(root)
     side = root / "sim"
     side.mkdir()
     shutil.move(tmp / "states", side / "states")
@@ -270,7 +272,7 @@ def record(root: Path, variants: list[tuple], n: int, rand: RZ.Randomization, im
             log.write(to_json({**e, "states": f"states/{e['states']}"}) + "\n")
     (side / "info.json").write_text(json.dumps(
         {**git_commit(), "fps": FPS, "control_every": CONTROL_EVERY, "per_variant": n, "images": images, "image_size": list(size),
-         "randomization": asdict(rand), "variants": [list(v) for v in variants]}, indent=1))
+         "randomization": asdict(rand), "variants": [list(v) for v in variants], "std_floor": STD_FLOOR}, indent=1))
     shutil.rmtree(tmp)
 
 
