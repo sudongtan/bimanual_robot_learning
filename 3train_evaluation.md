@@ -25,7 +25,14 @@ All on S1:A eval starts, train condition, trained on `action`; outputs under `ou
 
 **Result: passes (88%).** Every one of the 50 rollouts opened the drawer, and every success stopped. All 6 failures are the cube sliding in the drawer past S1's 5 mm limit: 5.1–7.7 mm, four of them ≤ 5.4 mm. Cube slide over all 50: median 4.2 mm, 10th–90th percentile 3.1–5.2 mm. The expert's slide over the 50 recorded episodes is 0.9–4.0 mm (median 2.2; `cube_moved` in `data/s1a/sim/episodes.jsonl`): the limit is above every demonstration, and the policy pulls about twice as hard as the expert. The remaining gap is the pull, not grasping or stopping.
 
-**Clean labels (`action_nominal`): training.** The comparison with `action` (2data_collection.md, design point 2, after DART) is the second half of step 1. A first start was stopped at 2.5k steps; restarted 2026-10-30 10:36 (`outputs/s1a_act_nominal`, data `data/s1a_nominal`), due ~23:00. Evaluate it as the `action` run (100k, 50 rollouts, temporal ensembling) and keep the better label.
+**Clean labels (`action_nominal`): no difference; keep `action`.** The second half of step 1 (2data_collection.md, design point 2: DART trains on the noise-free command while the noisy one is run). Same training (100k steps; `outputs/s1a_act_nominal`, data `data/s1a_nominal`) and the same 50 eval starts with temporal ensembling:
+
+| Label | Success | Stopped | Failed checks | Cube slide median (10th–90th pct, max) |
+|---|---|---|---|---|
+| `action` (noisy, as run) | 44/50 (88%) | 44/50 | cube_kept_place 6 | 4.2 mm (3.1–5.2, 7.7) |
+| `action_nominal` (clean) | 41/50 (82%) | 41/50 | cube_kept_place 9 | 4.5 mm (3.7–5.2, 6.8) |
+
+Paired by start: 38 succeed under both, 6 only with `action`, 3 only with `action_nominal`. Six against three is well within chance (McNemar's exact test, p ≈ 0.5), and per start the clean labels slide the cube 0.2 mm more (median). Both fail the same way, only by the cube sliding, mostly just over 5 mm. So at this demonstration noise the label choice doesn't matter for S1; keep `action`, the command the actuators actually got (as ACT records its sim data), and don't make `--nominal` views for later steps. DART's case for clean labels is recovery from compounding error; S1 shows none to recover from (every rollout opens the drawer), so a longer task (T1) is where it could still show up.
 
 **Still to run:** the 100k `action` checkpoint on held-out colours (`--condition eval_colours`). With 0.2–2 mm of slide to spare, some rollouts may tip over the limit there for reasons unrelated to colour; read failures by check, not just the rate.
 
