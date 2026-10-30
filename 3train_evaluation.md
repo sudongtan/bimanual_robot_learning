@@ -47,3 +47,19 @@ Paired by start: 38 succeed under both, 6 only with `action`, 3 only with `actio
 **3. Training speed.** At 480 × 640 ACT took 1.6 s per step on this Mac (~45 h per run), nearly all of it the model; at 240 × 320, 0.41 s. Hence the recording size (2data_collection.md, design point 4). The Mac must stay awake (`caffeinate -i -s -w <pid>`) and on mains power: a sleep cost ~1 h, Low Power Mode slows training.
 
 **4. Video decoding.** `torchcodec` can't load with Homebrew FFmpeg 9 (it supports up to 7.x), so LeRobot falls back to `pyav`. No effect on results.
+
+**5. Task imbalance in the shared scene (research, 2026-10-30; decision for step 3).** With 50 episodes per command, the drawer-closed scene has 50 S1 (stop) and 100 T1 (continue) episodes per opener arm. What similar work does:
+
+| Approach | Used by | Finding |
+|---|---|---|
+| Record balanced data | LIBERO, Meta-World MT10/50, ACT (equal demos per task) | The reference the others are compared with |
+| Upsample the rare behaviour to equal weight (resample or duplicate) | Parekh et al. 2025, "Towards Balanced Behavior Cloning from Imbalanced Datasets" (CALVIN) | An under-represented behaviour loses success; equal-weight upsampling roughly matches a truly balanced dataset, except for a harder behaviour, where the duplicated demos overfit |
+| Weights by dataset size, hand-adjusted | Octo, OpenVLA (Open X-Embodiment mixtures) | Built for mixing large datasets |
+| Temperature sampling, weight ∝ \|Dᵢ\|^(1/τ) | arXiv 2510.19373 (LIBERO, RoboCasa) | LIBERO 0.76 → 0.85 over size-proportional. With two groups it only interpolates between 1:2 and 1:1 |
+| Learned weights (ReMix; meta-gradient) | Hejna et al. CoRL 2024; Parekh et al. | Beat hand-set weights on large mixtures; need reference models; overkill for 6 variants |
+| Re-sampling under extreme imbalance (46 vs 5 demos) | arXiv 2602.06512 (miniVLA, LIBERO) | Barely helped (26.5% → 27.1%); the failures were in grounding the object, not the ratio |
+
+- Closest to this case: Parekh et al.'s CALVIN setting, where the same task leads to different behaviours by context, as our command decides stop or continue in one scene. Their result: fix the imbalance, and plain equal-weight upsampling is enough when the data is clean and the rare behaviour isn't harder (here: scripted data, and stopping is the easy behaviour).
+- LeRobot 0.6.1 can't weight: `EpisodeAwareSampler` draws every frame uniformly, and `--dataset.episodes` is a mask (an episode listed twice counts once). Upsampling has to be in the data (duplicate episodes in the training view) or a custom sampler.
+- These papers weight state-action pairs, not episodes. At the decision state (drawer open, arms home) S1 holds still for 2 s (~100 frames per episode, "stay"), while T1 passes through it in a few frames before the second arm moves. By frames the decision may lean towards stopping, not continuing; count it on the recorded data before choosing a weight.
+- **Decision:** record 50 per command (seeds are deterministic, so adding S1 episodes later gives the same episodes as recording them now). Train step 3 first without reweighting, as the baseline; count the stay/move frames at the decision state; then upsample (duplicate episodes in the view) if the stop or continue rate shows a lean.

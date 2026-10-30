@@ -203,7 +203,7 @@ The full plan below records all 20 variants before reaching the VLA. This versio
 | 3 | — | ACT with the variant input (one-hot, as Meta-World MT10/MT50), all 6 variants | Success per variant, swap test, stop rate (S1) and continue rate (T1) |
 | 4 | — | SmolVLA fine-tuned on the same 300 episodes, with the commands | Same, under the train, eval-colours and eval-phrasing conditions. The gap to step 3 on the train condition is the cost of reading language |
 
-**Imbalance:** T1 has two thirds of the scene's episodes, so a policy that always continues is rewarded. Sample S1 and T1 equally during training (as in the full plan), or record 100 per S1 arm.
+**Imbalance:** T1 has two thirds of the scene's episodes, so a policy that always continues may be rewarded (though by frames at the decision point, S1's 2 s hold may outweigh it). Record 50 per command, train the step-3 baseline without reweighting, then upsample if the stop or continue rate leans; research and decision in [3train_evaluation.md](3train_evaluation.md), finding 5.
 
 **On hold:** S2, S3, S4 and T2 (their scenes and data); the middle target; the chained-primitive and zero-shot composition tests (steps 13–14, which need the S4 command; the natural next addition is S4 plus S2 from the fully-open scene, so that scene is shared too); Diffusion Policy, π0 and the per-variant T1 baseline. What the minimal version gives up: the hand-over is shown inside one command (T1), not as two primitive commands chained.
 

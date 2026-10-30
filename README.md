@@ -20,8 +20,10 @@ Six tasks, each doable by either arm from the same start scenes (20 command vari
 ## Status
 
 - **Built and validated:** the workcell, a scripted expert for all six tasks (800/800 successful on random starts), randomisation, the recorder, data checks, and policy evaluation in sim.
-- **Now:** plan step 1, ACT on "open the drawer with arm A" (50 demonstrations), trained on the commands with and without demonstration noise.
-- **No policy results yet.**
+- **Scope now: the minimal plan.** One scene (drawer closed, cube inside) shared by S1 and T1: 6 command variants, 300 demonstrations, enough to show every point up to a VLA. S2–S4 and T2 are on hold ([1tasks_scene.md](1tasks_scene.md)).
+- **Step 1 done:** ACT on "open the drawer with arm A" (50 demonstrations) succeeds and stops in **88% (44/50)** of held-out starts, with ACT's temporal ensembling. All failures are the cube sliding just past the 5 mm limit in the drawer. Training on the noise-free expert commands made no real difference (82%), so the commands as sent are kept. Two findings along the way: a normalisation bug on joints that never move, and temporal ensembling taking the policy from 4/10 to 10/10 ([3train_evaluation.md](3train_evaluation.md)).
+- **Now (steps 2–3):** recording S1 A/B and T1 A/B × left/right (50 each), then one ACT with a one-hot command input on all six, evaluated for success, stop rate (S1) and continue rate (T1).
+- **Next (step 4):** SmolVLA fine-tuned on the same data with the text commands.
 
 ## Quick start
 
@@ -32,8 +34,11 @@ python -m pytest tests -m "not slow"                                  # fast che
 python -m sim.validate 40                                             # scripted expert on random starts
 python -m sim.record data/s1a --variants S1:A --per-variant 50        # record demonstrations (LeRobot dataset)
 python -m sim.check_data data/s1a                                     # check a recording
-python -m sim.evaluate CKPT --variants S1:A --condition train         # evaluate a trained policy in sim
+python -m sim.dataset_view data/min data/min_onehot --variant-input   # add the one-hot command input for ACT
+python -m sim.evaluate CKPT --variants S1:A --temporal-ensemble 0.01  # evaluate a trained policy in sim
 ```
+
+Training uses LeRobot 0.6.1 (`lerobot-train`); `cloud/train.sh` runs ACT or SmolVLA on a rented GPU.
 
 ## Documents
 
