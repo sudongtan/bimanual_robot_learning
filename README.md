@@ -42,3 +42,4 @@ python -m sim.evaluate CKPT --variants S1:A --condition train         # evaluate
 | [0background.md](0background.md) | Motivation, related work, the research question, what is evaluated, scope |
 | [1tasks_scene.md](1tasks_scene.md) | Tasks, scene, randomisation, the scripted expert, success checks, files, and the step-by-step plan |
 | [2data_collection.md](2data_collection.md) | Recording design, data checks, cube colours |
+| [3train_evaluation.md](3train_evaluation.md) | Training and evaluation results, bugs and findings |
