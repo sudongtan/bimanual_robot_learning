@@ -133,8 +133,11 @@ def rollout(policy, pre, post, variant, seed: int, rand: RZ.Randomization, video
              and np.abs(items_tail[:, 3] - items_tail[0, 3]).max() < E.PUSHED)
     result = {"variant": list(variant), "seed": seed, "command": start["command"],
               "cube_colour": start["scene"].get("cube_colour"), "success": ok, "checks": checks,
-              # mm; how far the cube moved in the drawer (cube_kept_place fails above E.PUSHED)
-              "cube_slide_mm": 1000 * float(np.linalg.norm(E.cube_in_drawer_frame(sim) - start["cube_drawer_xy"]))}
+              # mm; how far the cube moved in the drawer (cube_kept_place fails above E.PUSHED; only meaningful for S1)
+              "cube_slide_mm": 1000 * float(np.linalg.norm(E.cube_in_drawer_frame(sim) - start["cube_drawer_xy"])),
+              # m, world frame; with the nearest named spot, tells a wrong target from a missed or dropped cube
+              "cube_final": [round(float(x), 4) for x in sim.body_pos("cube")],
+              "nearest_target": min(T.CUBE_TARGETS, key=lambda t: np.linalg.norm(sim.body_pos("cube")[:2] - T.CUBE_TARGETS[t]))}
     if variant[0] in STOP_TASKS:
         result["stopped"] = bool(ok and still)
     if variant[0] in FIRST_STEP_DONE:

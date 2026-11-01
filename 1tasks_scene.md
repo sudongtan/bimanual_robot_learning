@@ -1,12 +1,15 @@
 # Bimanual SO-101 workcell: tasks, scene and status
 
-_Last updated: 2026-10-29_
+_Last updated: 2026-11-01_
 
 Goal: collect scripted bimanual demos in sim of four primitive skills and two composites built from them, each composite split across the two arms. Use them to (1) train imitation policies (ACT/DP) evaluated in sim, one policy with a one-hot variant input (task × arm × target, 20 variants), checked first with a few per-variant policies, then (2) fine-tune a pretrained VLA (SmolVLA/π0) on all tasks with varied instructions, evaluated on held-out start states and paraphrases. Then test composition: running a composite as its two primitive commands in a row, with and without composite training data.
 
 ## Status
 
-The workcell, a scripted expert for all six tasks, the per-episode randomisation, the recorder and the success checks (which score a policy the same way as the expert, `sim/episode.py`) are built and validated. The step-0 batch is recorded and checked ([2data_collection.md](2data_collection.md)). **Now: plan step 1** (S1 arm A, 50 episodes at 240 × 320, ACT trained on `action` and on `action_nominal`); `sim/evaluate.py` runs the rollouts. Result: ACT on `action`, 100k steps, **88% (44/50) on S1:A eval starts, all successes stopped**, with temporal ensembling (without it, 4/10 at 60k; all failures are the cube sliding > 5 mm; [3train_evaluation.md](3train_evaluation.md)). Passes step 1's ≥ 80% bar. `action_nominal` scores 82% (41/50), no real difference, so `action` is kept. **Step 1 done.**
+The workcell, a scripted expert for all six tasks, the per-episode randomisation, the recorder and the success checks (which score a policy the same way as the expert, `sim/episode.py`) are built and validated. The step-0 batch is recorded and checked ([2data_collection.md](2data_collection.md)). Working to the **minimal plan** (below); results in [3train_evaluation.md](3train_evaluation.md):
+- **Step 1 done:** ACT on S1 arm A, 88% (44/50) on eval starts, all successes stopped, with temporal ensembling. Training on `action_nominal` gave 82%, no real difference, so `action` is kept.
+- **Steps 2–3 done:** `data/min` (300 episodes); one ACT with the one-hot variant input: S1 72/100, T1 195/200, stop and continue follow the command every time (no S1 rollout took the cube out, every T1 rollout continued, no cube on the wrong side). All S1 failures are the 5 mm slide limit.
+- **Next: step 4,** SmolVLA on a rented GPU ([cloud/README.md](cloud/README.md); on this Mac it would take ~8 days).
 
 Validation, `python -m sim.validate 40` (40 random starts per arm and per target, all randomisation on, expert at 50 Hz as recorded):
 
@@ -60,7 +63,7 @@ If a start scene only ever appears with one task, a policy can learn "this scene
 
 Each scene is drawn by the same code for every task that starts from it (`reset` in `sim/episode.py`; `S2_CUBE_IN_DRAWER = 0.5` splits S2 between the second and third). Item starts never depend on the target.
 
-**Known imbalance:** the counts within a scene are uneven, so always guessing the most common task is right 75% of the time in the first scene (T1) and 86% in the third (S4). The scene doesn't decide the task, but ignoring the command is often rewarded. Balance by sampling within each scene during training (oversample the smaller tasks), and check with the swap tests.
+**Known imbalance:** the counts within a scene are uneven, so always guessing the most common task is right 75% of the time in the first scene (T1) and 86% in the third (S4). The scene doesn't decide the task, but ignoring the command is often rewarded. Balance by sampling within each scene during training (oversample the smaller tasks) if the stop and continue rates show a lean, and check with the swap tests. In the minimal plan's scene (1:2) ACT with the one-hot input showed no lean, so no reweighting was needed (3train_evaluation.md, finding 5).
 
 **How each stage uses this:** the VLA (stage 2) is trained on all tasks and must read the command, so shared scenes matter. A per-variant ACT/DP (stage 1) only ever sees its own variant, so shared scenes don't affect it; a single ACT/DP over several variants can't tell them apart and needs the one-hot variant input (as Meta-World MT10/MT50 adds a task ID). **Rule for new tasks:** start from one of these scenes, or share the start scene with another task, and draw item starts the same way for every variant (no start area that depends on the target).
 
@@ -70,7 +73,7 @@ Each scene is drawn by the same code for every task that starts from it (`reset`
 - **Arms:** two SO-101 (MuJoCo Menagerie), facing each other, bases at x = ∓0.20 m. Home: upright over each base, arms 22 cm apart.
 - **Drawer:** in a small cabinet on the tabletop at the back centre; pulls 14 cm toward the table centre (end stop). The cabinet top is recessed 5 cm from the front.
 - **Items:** cube 4 cm, 30 g; distractors puck, cylinder and pebble (0–2 per episode). Unused items are parked on the floor.
-- **Cameras:** `overview` (straight down from 1.25 m, 30° vertical field of view: at 640 × 480 it shows 67 × 50 cm, the table and the distractor zones), `left/wrist_cam`, `right/wrist_cam` (75°). Recorded at 480 × 640 (as ACT/ALOHA); the cube is ~40 px across in the overview, ~14 px after resizing to 224 for π0. At home the grippers point up, so the wrist cameras only see the scene once an arm reaches down; the overview is the only view of the start.
+- **Cameras:** `overview` (straight down from 1.25 m, 30° vertical field of view: at 640 × 480 it shows 67 × 50 cm, the table and the distractor zones), `left/wrist_cam`, `right/wrist_cam` (75°). Recorded at 240 × 320 by default (`sim/record.py --size`; 480 × 640 as ACT/ALOHA was too slow to train on this Mac, 2data_collection.md design point 4); the cube covers ~400 px in the overview, ~260 px after resizing to 224 × 224. At home the grippers point up, so the wrist cameras only see the scene once an arm reaches down; the overview is the only view of the start.
 - **Simulation:** timestep 2 ms (500 Hz). 12 actuators, position-controlled, in this order: `left/shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper`, then the same for `right/`.
 
 | Where | Area |
@@ -169,10 +172,11 @@ python -m sim.validate 40 all eval      # held-out colours and phrasings
 | `sim/record.py` | Episode recorder: LeRobot dataset plus exact-replay states, see `2data_collection.md` |
 | `sim/check_data.py` | First-batch checks on a recorded dataset (images, actions, labels), see `2data_collection.md` |
 | `sim/colour_contrast.py` | Cube colour sweep: contrast of each palette (and rejected) colour with its surroundings on a recorded dataset, see `2data_collection.md`, "Cube colours" |
-| `sim/evaluate.py` | Policy rollouts in sim under the evaluation conditions in the plan (fixed horizon, success and stop rate) |
-| `sim/dataset_view.py` | A training view of a recorded dataset: `--nominal` (train on `action_nominal`), `--variant-input` (adds the one-hot variant vector as `observation.environment_state`) |
-| `cloud/train.sh` | ACT or SmolVLA training on a rented CUDA GPU (LeRobot only; evaluation stays on the Mac) |
-| `tests/` | `test_workcell.py` (geometry, reach), `test_randomize.py` (randomisation, seeds), `test_tasks.py` (episodes, exact replay), `test_episode.py` (starts, success checks), `test_record.py` (recorder) |
+| `sim/evaluate.py` | Policy rollouts in sim under the evaluation conditions in the plan (fixed horizon; success, stop rate, continue rate; `--temporal-ensemble` for ACT); logs each rollout's checks, cube slide and final position |
+| `sim/dataset_view.py` | A training view of a recorded dataset: `--variant-input` (adds the one-hot variant vector as `observation.environment_state`), `--nominal` (train on `action_nominal`; used only in step 1) |
+| `scripts/` | The runs behind the results: `train_step1.sh` (step 1), `step2_3.sh` (steps 2–3, unattended: record, check, view, train, evaluate) |
+| `cloud/train.sh`, `cloud/README.md` | ACT or SmolVLA training on a rented CUDA GPU (LeRobot only; evaluation stays on the Mac), and the step-by-step instructions |
+| `tests/` | `test_workcell.py` (geometry, reach), `test_randomize.py` (randomisation, seeds), `test_tasks.py` (episodes, exact replay), `test_episode.py` (starts, success checks), `test_record.py` (recorder, dataset views), `test_evaluate.py` (rollout loop with the expert's commands) |
 | `deprecated/` | The earlier design; ignore |
 
 ## Minimal plan (active): one scene, S1 and T1
@@ -198,19 +202,19 @@ The full plan below records all 20 variants before reaching the VLA. This versio
 
 | Step | Record | Train | Check |
 |---|---|---|---|
-| 1 | S1 arm A: 50 | ACT on S1 arm A, on `action` and on `action_nominal` | As step 1 of the full plan: ≥ 80% on the train condition; keep the better action label |
-| 2 | S1 arm B: 50; T1 opener A/B × left/right: 200 | — | The first-batch checks (`sim.check_data`) |
-| 3 | — | ACT with the variant input (one-hot, as Meta-World MT10/MT50), all 6 variants | Success per variant, swap test, stop rate (S1) and continue rate (T1) |
+| 1 | S1 arm A: 50 | ACT on S1 arm A, on `action` and on `action_nominal` | As step 1 of the full plan: ≥ 80% on the train condition; keep the better action label. **Done:** 88%; `action` kept |
+| 2 | S1 arm B: 50; T1 opener A/B × left/right: 200 (recorded as one dataset with S1 arm A, `data/min`) | — | The first-batch checks (`sim.check_data`). **Done:** 300/300, 11 low-contrast flags (red cubes, dim light) |
+| 3 | — | ACT with the variant input (one-hot, as Meta-World MT10/MT50), all 6 variants | Success per variant, swap test, stop rate (S1) and continue rate (T1). **Done:** S1 72%, T1 97.5%; stop/continue and target follow the command |
 | 4 | — | SmolVLA fine-tuned on the same 300 episodes, with the commands | Same, under the train, eval-colours and eval-phrasing conditions. The gap to step 3 on the train condition is the cost of reading language |
 
-**Imbalance:** T1 has two thirds of the scene's episodes, so a policy that always continues may be rewarded (though by frames at the decision point, S1's 2 s hold may outweigh it). Record 50 per command, train the step-3 baseline without reweighting, then upsample if the stop or continue rate leans; research and decision in [3train_evaluation.md](3train_evaluation.md), finding 5.
+**Imbalance:** T1 has two thirds of the scene's episodes, so a policy that always continues may be rewarded (though by frames at the decision point, S1's 2 s hold may outweigh it). Recorded 50 per command and trained step 3 without reweighting: no lean (no S1 rollout continued, every T1 rollout did), so none is needed; research and decision in [3train_evaluation.md](3train_evaluation.md), finding 5.
 
 **On hold:** S2, S3, S4 and T2 (their scenes and data); the middle target; the chained-primitive and zero-shot composition tests (steps 13–14, which need the S4 command; the natural next addition is S4 plus S2 from the fully-open scene, so that scene is shared too); Diffusion Policy, π0 and the per-variant T1 baseline. What the minimal version gives up: the hand-over is shown inside one command (T1), not as two primitive commands chained.
 
 **Code for the minimal plan (written and checked end to end):**
-- Variant input: `RZ.variant_vector` (11 dims, `VARIANT_DIMS`), added to a dataset by `python -m sim.dataset_view SRC DST --variant-input` (with `--nominal` too if step 1 picks the clean labels) as `observation.environment_state`, which LeRobot's ACT takes as an extra encoder input, unnormalised. `sim/evaluate.py` supplies it when the policy has it. Checked: ACT trains on it, and a rollout gets the vector.
+- Variant input: `RZ.variant_vector` (11 dims, `VARIANT_DIMS`), added to a dataset by `python -m sim.dataset_view SRC DST --variant-input` as `observation.environment_state`, which LeRobot's ACT takes as an extra encoder input, unnormalised. `sim/evaluate.py` supplies it when the policy has it. Checked: ACT trains on it, and a rollout gets the vector.
 - Continue rate in `sim/evaluate.py`: once T1's drawer is open (or T2's cube is in), the second arm leaves home before the horizon ends. `test_expert_commands_succeed_in_rollout` replays S1 (stops) and T1 (continues).
-- SmolVLA: `bash cloud/train.sh smolvla DATASET OUT` fine-tunes `lerobot/smolvla_base` (LeRobot's recipe: batch 64, 20k steps), mapping our cameras onto its `camera1`–`camera3`. Checked on the Mac (2 steps on CPU, then a rollout through `sim/evaluate.py`); the real run needs a CUDA GPU (on the CPU one rollout takes ~4 min).
+- SmolVLA: `bash cloud/train.sh smolvla DATASET OUT` fine-tunes `lerobot/smolvla_base` (LeRobot's recipe: batch 64, 20k steps), mapping our cameras onto its `camera1`–`camera3`. Checked on the Mac (training on MPS, then a rollout through `sim/evaluate.py`). The recipe needs a CUDA GPU: on this Mac's GPU it takes 0.55 s per sample whatever the batch, ~8 days for the 1.28M samples (3train_evaluation.md, finding 6). Steps: [cloud/README.md](cloud/README.md).
 
 ## Full plan (on hold beyond the minimal version): data and training, step by step
 
@@ -233,9 +237,9 @@ ACT/DP with the one-hot input never sees the command, so it gets the first two c
 | **Stop rate** | S1 (or S3) | The task succeeds, and in the last 2 s of the horizon no joint of either arm moves > 0.05 rad and the cube and drawer move < 5 mm (the expert's hold check) |
 | **Continue rate** | T1 (or T2) | After the first arm finishes its step, the second arm leaves home (a joint > 0.1 rad from its start) before the horizon ends |
 
-A policy that ignores the command does well on one of the two and badly on the other; one that follows it does well on both. `sim/evaluate.py` runs the rollouts (train and eval-colours conditions, and the stop rate; the continue rate is still to add), built on `reset` and `success` in `sim/episode.py`: `python -m sim.evaluate CKPT --variants S1:A --condition train`. `test_expert_commands_succeed_in_rollout` drives it with the expert's own commands to check the loop. The second and third conditions are `Randomization(colours_split="eval")` and `Randomization(wording_split="eval")` (`split="eval"` holds out both).
+A policy that ignores the command does well on one of the two and badly on the other; one that follows it does well on both. `sim/evaluate.py` runs the rollouts (all three conditions, the stop and continue rates), built on `reset` and `success` in `sim/episode.py`: `python -m sim.evaluate CKPT --variants S1:A --condition train --temporal-ensemble 0.01` (ACT). `test_expert_commands_succeed_in_rollout` drives it with the expert's own commands to check the loop. The second and third conditions are `Randomization(colours_split="eval")` and `Randomization(wording_split="eval")` (`split="eval"` holds out both).
 
-**Variant input (one-hot, 11 dims)**, appended to `observation.state` for ACT/DP: task (6: S1, S2, S3, S4, T1, T2) + arm (2: A, B; the opener in T1, the placer in T2) + target (3: left, middle, right; all zero for S1, S2, S3, T2). The recorder saves task, arm and target per episode, so the vector can be built at training time.
+**Variant input (one-hot, 11 dims)**, a separate input for ACT/DP (`observation.environment_state`, which LeRobot's ACT encodes as its own token): task (6: S1, S2, S3, S4, T1, T2) + arm (2: A, B; the opener in T1, the placer in T2) + target (3: left, middle, right; all zero for S1, S2, S3, T2). The recorder saves task, arm and target per episode, so the vector can be built at training time.
 
 **Phase A: check the data with per-variant policies** (plain ACT, no variant input, as in ACT/ALOHA)
 

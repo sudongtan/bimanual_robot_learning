@@ -224,6 +224,31 @@ def _write_shard(job) -> int:
     return len(entries)
 
 
+SHARD_TRIES = 3
+
+
+def _write_shards(jobs, workers):
+    """Run _write_shard on every job, rewriting a failed shard from scratch (its states are on disk) up to
+    SHARD_TRIES times. The SVT-AV1 encoder occasionally crashes while closing (SIGTRAP in its semaphore teardown,
+    once in ~900 video encodes), which fails one episode's save; a fresh pool per round also survives a dead worker."""
+    for attempt in range(1, SHARD_TRIES + 1):
+        failed = []
+        with ProcessPoolExecutor(min(workers, len(jobs))) as pool:
+            futures = [(pool.submit(_write_shard, job), job) for job in jobs]
+            for future, job in futures:
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"{job[0].name} failed (try {attempt}/{SHARD_TRIES}): {e!r}", flush=True)
+                    failed.append(job)
+        if not failed:
+            return
+        for job in failed:
+            shutil.rmtree(job[0], ignore_errors=True)
+        jobs = failed
+    raise RuntimeError(f"{len(jobs)} shards failed {SHARD_TRIES} times: {[j[0].name for j in jobs]}")
+
+
 def record(root: Path, variants: list[tuple], n: int, rand: RZ.Randomization, images: bool = True, workers=None,
            size=(HEIGHT, WIDTH)):
     """Two passes. 1: the expert walks each variant's seeds (in parallel) and every episode's frames are
@@ -259,8 +284,8 @@ def record(root: Path, variants: list[tuple], n: int, rand: RZ.Randomization, im
         chunks = [c.tolist() for c in np.array_split(np.array(good, dtype=object), min(workers, len(good)))]
         shards = [tmp / f"shard{i:03d}" for i in range(len(chunks))]
         jobs = [(shard, chunk, tmp / "states", rand, images, size) for shard, chunk in zip(shards, chunks)]
-        print(f"rendering and writing {len(good)} episodes in {len(jobs)} parts", flush=True)
-        list(pool.map(_write_shard, jobs))
+    print(f"rendering and writing {len(good)} episodes in {len(jobs)} parts", flush=True)
+    _write_shards(jobs, workers)
 
     aggregate_datasets([f"local/{s.name}" for s in shards], REPO_ID, roots=shards, aggr_root=root)
     floor_std(root)

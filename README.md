@@ -22,8 +22,8 @@ Six tasks, each doable by either arm from the same start scenes (20 command vari
 - **Built and validated:** the workcell, a scripted expert for all six tasks (800/800 successful on random starts), randomisation, the recorder, data checks, and policy evaluation in sim.
 - **Scope now: the minimal plan.** One scene (drawer closed, cube inside) shared by S1 and T1: 6 command variants, 300 demonstrations, enough to show every point up to a VLA. S2–S4 and T2 are on hold ([1tasks_scene.md](1tasks_scene.md)).
 - **Step 1 done:** ACT on "open the drawer with arm A" (50 demonstrations) succeeds and stops in **88% (44/50)** of held-out starts, with ACT's temporal ensembling. All failures are the cube sliding just past the 5 mm limit in the drawer. Training on the noise-free expert commands made no real difference (82%), so the commands as sent are kept. Two findings along the way: a normalisation bug on joints that never move, and temporal ensembling taking the policy from 4/10 to 10/10 ([3train_evaluation.md](3train_evaluation.md)).
-- **Now (steps 2–3):** recording S1 A/B and T1 A/B × left/right (50 each), then one ACT with a one-hot command input on all six, evaluated for success, stop rate (S1) and continue rate (T1).
-- **Next (step 4):** SmolVLA fine-tuned on the same data with the text commands.
+- **Steps 2–3 done:** one ACT with a one-hot command input, trained on all six variants (300 demonstrations) of the one scene. **The command decides the task and the target:** from the same start, no S1 rollout went on to take the cube out, all 200 T1 rollouts continued to the hand-over, and none put the cube on the wrong side. T1 succeeds in 97.5% (195/200); S1 in 72% (72/100), every failure the cube sliding 5.0–6.3 mm against the 5 mm limit ([3train_evaluation.md](3train_evaluation.md)).
+- **Next (step 4):** SmolVLA fine-tuned on the same data with the text commands, on a rented GPU (~8 days on this Mac, a few hours on an A100 or 4090).
 
 ## Quick start
 
@@ -38,7 +38,7 @@ python -m sim.dataset_view data/min data/min_onehot --variant-input   # add the 
 python -m sim.evaluate CKPT --variants S1:A --temporal-ensemble 0.01  # evaluate a trained policy in sim
 ```
 
-Training uses LeRobot 0.6.1 (`lerobot-train`); `cloud/train.sh` runs ACT or SmolVLA on a rented GPU.
+Training uses LeRobot 0.6.1 (`lerobot-train`); the runs behind the results are in `scripts/`. `cloud/train.sh` runs ACT or SmolVLA on a rented GPU: [cloud/README.md](cloud/README.md).
 
 ## Documents
 
@@ -48,3 +48,4 @@ Training uses LeRobot 0.6.1 (`lerobot-train`); `cloud/train.sh` runs ACT or Smol
 | [1tasks_scene.md](1tasks_scene.md) | Tasks, scene, randomisation, the scripted expert, success checks, files, and the step-by-step plan |
 | [2data_collection.md](2data_collection.md) | Recording design, data checks, cube colours |
 | [3train_evaluation.md](3train_evaluation.md) | Training and evaluation results, bugs and findings |
+| [cloud/README.md](cloud/README.md) | Step by step: training on a rented GPU, evaluating on the Mac |

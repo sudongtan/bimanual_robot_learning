@@ -14,7 +14,7 @@ three, on what training will read (the LeRobot dataset), plus the episode log:
     labels    the command names the variant's arm(s) and target; only the named arm moves (composites:
               the first arm before the switch, the second after); subtask labels switch once; still hold
     images    contact sheets (three cameras at a few moments per episode), and from re-rendered
-              segmentation: how many overview pixels the cube covers (at 480 x 640 and resized to
+              segmentation: how many overview pixels the cube covers (at the recorded size and resized to
               224 x 224, as π0) and its colour contrast with each surround (arm parts, table, drawer, handle, cabinet)
 
 Every line that breaks a threshold is listed under FLAGS at the top of the report.

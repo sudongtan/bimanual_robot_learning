@@ -3,8 +3,8 @@
 Results per plan step ([1tasks_scene.md](1tasks_scene.md), "Minimal plan"), and the bugs and findings that changed how policies are trained or evaluated. Recording design and data checks are in [2data_collection.md](2data_collection.md).
 
 **How a number is made.**
-- Training: `lerobot-train` (LeRobot 0.6.1), ACT at LeRobot's setting (100k steps, batch 8), on this Mac's GPU (`mps`) at 240 × 320 (2data_collection.md, design point 4), ~2.4 steps/s, ~12 h per run. Script: `outputs/train_step1.sh`; for a rented GPU, `cloud/train.sh`.
-- Evaluation: `python -m sim.evaluate CKPT --variants S1:A --episodes 50 --temporal-ensemble 0.01`. Rollouts start from `EVAL_SEEDS` (the same for every variant and model, never trained on), run a fixed horizon (the task's longest demo plus 2 s, as CALVIN) and are scored by the expert's own success checks (`sim/episode.py`), plus the stop rate (S1, S3) and continue rate (T1, T2). Each rollout logs its checks and the cube's slide in the drawer (`cube_slide_mm`) to `episodes.jsonl`.
+- Training: `lerobot-train` (LeRobot 0.6.1), ACT at LeRobot's setting (100k steps, batch 8), on this Mac's GPU (`mps`) at 240 × 320 (2data_collection.md, design point 4), ~2.4 steps/s, ~12 h per run. Scripts: `scripts/train_step1.sh`, `scripts/step2_3.sh`; for a rented GPU, `cloud/train.sh` ([cloud/README.md](cloud/README.md)).
+- Evaluation: `python -m sim.evaluate CKPT --variants S1:A --episodes 50 --temporal-ensemble 0.01`. Rollouts start from `EVAL_SEEDS` (the same for every variant and model, never trained on), run a fixed horizon (the task's longest demo plus 2 s, as CALVIN) and are scored by the expert's own success checks (`sim/episode.py`), plus the stop rate (S1, S3) and continue rate (T1, T2). Each rollout logs its checks, the cube's slide in the drawer (`cube_slide_mm`, meaningful for S1), and its final position with the nearest named spot (`cube_final`, `nearest_target`) to `episodes.jsonl`.
 
 ## Results
 
@@ -34,7 +34,39 @@ All on S1:A eval starts, train condition, trained on `action`; outputs under `ou
 
 Paired by start: 38 succeed under both, 6 only with `action`, 3 only with `action_nominal`. Six against three is well within chance (McNemar's exact test, p ≈ 0.5), and per start the clean labels slide the cube 0.2 mm more (median). Both fail the same way, only by the cube sliding, mostly just over 5 mm. So at this demonstration noise the label choice doesn't matter for S1; keep `action`, the command the actuators actually got (as ACT records its sim data), and don't make `--nominal` views for later steps. DART's case for clean labels is recovery from compounding error; S1 shows none to recover from (every rollout opens the drawer), so a longer task (T1) is where it could still show up.
 
-**Still to run:** the 100k `action` checkpoint on held-out colours (`--condition eval_colours`). With 0.2–2 mm of slide to spare, some rollouts may tip over the limit there for reasons unrelated to colour; read failures by check, not just the rate.
+**Still to run:** the 100k `action` checkpoint, and step 3's, on held-out colours (`--condition eval_colours`). With 0.2–2 mm of slide to spare, some rollouts may tip over the limit there for reasons unrelated to colour; read failures by check, not just the rate.
+
+### Minimal plan steps 2-3: one ACT with the one-hot variant input, 6 variants (300 episodes)
+
+Recorded `data/min` (S1 A/B, T1 A/B × left/right, 50 each; 0 expert failures; checks: 11/300 flags, all red cubes under dim light at 0.34-0.40 contrast with the table, as in `data/s1a`). View `data/min_onehot` (`--variant-input`, no reweighting: finding 5). ACT 100k steps (`outputs/min_act`, `scripts/step2_3.sh`; finished 2026-10-31 22:22, evaluated by 2026-11-01 04:12). The dataset is 10× step 1's, so 100k steps at batch 8 is ~3 epochs (step 1: ~30).
+
+Interim, 40k checkpoint (~1.3 epochs), 10 rollouts per variant, temporal ensembling (`eval_040000_te`):
+
+| Variant | Success | Stop (S1) / continue (T1) | Failed checks |
+|---|---|---|---|
+| S1:A | 7/10 | stop 7/10 | cube_kept_place 3 (5.2-5.7 mm) |
+| S1:B | 10/10 | stop 10/10 | — |
+| T1:A:left | 6/10 | continue 10/10 | cube_at_target 4 |
+| T1:A:right | 6/10 | continue 10/10 | cube_at_target 4, first_arm_kept_to_its_step 1 |
+| T1:B:left | 4/10 | continue 10/10 | cube_at_target 6 |
+| T1:B:right | 8/10 | continue 10/10 | cube_at_target 2 |
+
+The task input works already: every S1 success stops and every T1 rollout continues to the hand-over (from the same start scene). T1's failures are all the cube not ending within 2 cm of its spot; from the logged slide some were never carried out (9-50 mm from the drawer start), others ended about as far away as a placed cube, which may be the wrong side or a near miss. From this checkpoint on, `sim/evaluate.py` also logs the cube's final position and the nearest named spot (`cube_final`, `nearest_target`) to tell these apart.
+
+**Final, 100k checkpoint (~3 epochs), 50 rollouts per variant, temporal ensembling (`eval_100000_te`):**
+
+| Variant | Success | Stop (S1) / continue (T1) | Failed checks |
+|---|---|---|---|
+| S1:A | 30/50 (60%) | stop 30/50 | cube_kept_place 20 (5.0-6.1 mm) |
+| S1:B | 42/50 (84%) | stop 42/50 | cube_kept_place 8 (5.0-6.3 mm) |
+| T1:A:left | 49/50 (98%) | continue 50/50 | cube_at_target 1 |
+| T1:A:right | 49/50 (98%) | continue 50/50 | cube_at_target 1 |
+| T1:B:left | 47/50 (94%) | continue 50/50 | cube_at_target 3 |
+| T1:B:right | 50/50 (100%) | continue 50/50 | — |
+
+- **The command picks the task and the target.** From one start scene, no S1 rollout took the cube out (every S1 slide ≤ 6.3 mm: the cube stayed in the drawer), every T1 rollout continued to the hand-over (200/200), and no T1 cube ended at the other target (0/200 wrong side; `nearest_target`). So the imbalance (finding 5) produced no lean either way, and no reweighting is needed.
+- **T1: 195/200 (97.5%).** The 5 failures: 3 near misses for T1:B:left (cube 0.5-2.8 cm from its spot, or not upright), and one start (seed 100000) where both arm-A commands left the cube in the drawer after the second arm's grasp missed (video `T1_A_left_100000_fail.mp4`).
+- **S1: 72/100, every failure the 5 mm slide limit.** All S1 failures slid the cube 5.0-6.3 mm. S1:A is below the single-task policy of step 1 (88%), with a harder pull (median slide 4.9 mm vs 4.2; S1:B 4.3). Likely cause: S1's frames are seen ~3 times here against ~30 in step 1. Not tested yet; the stop rate equals success because it requires it, so it doesn't separate "held still" from the slide.
 
 ## Findings and bugs
 
@@ -46,7 +78,7 @@ Paired by start: 38 succeed under both, 6 only with `action`, 3 only with `actio
 
 **3. Training speed.** At 480 × 640 ACT took 1.6 s per step on this Mac (~45 h per run), nearly all of it the model; at 240 × 320, 0.41 s. Hence the recording size (2data_collection.md, design point 4). The Mac must stay awake (`caffeinate -i -s -w <pid>`) and on mains power: a sleep cost ~1 h, Low Power Mode slows training.
 
-**4. Video decoding.** `torchcodec` can't load with Homebrew FFmpeg 9 (it supports up to 7.x), so LeRobot falls back to `pyav`. No effect on results.
+**4. Video decoding.** `torchcodec` can't load with Homebrew FFmpeg 9 (it supports FFmpeg 4–8), so LeRobot falls back to `pyav`. No effect on results.
 
 **5. Task imbalance in the shared scene (research, 2026-10-30; decision for step 3).** With 50 episodes per command, the drawer-closed scene has 50 S1 (stop) and 100 T1 (continue) episodes per opener arm. What similar work does:
 
@@ -63,3 +95,8 @@ Paired by start: 38 succeed under both, 6 only with `action`, 3 only with `actio
 - LeRobot 0.6.1 can't weight: `EpisodeAwareSampler` draws every frame uniformly, and `--dataset.episodes` is a mask (an episode listed twice counts once). Upsampling has to be in the data (duplicate episodes in the training view) or a custom sampler.
 - These papers weight state-action pairs, not episodes. At the decision state (drawer open, arms home) S1 holds still for 2 s (~100 frames per episode, "stay"), while T1 passes through it in a few frames before the second arm moves. By frames the decision may lean towards stopping, not continuing; count it on the recorded data before choosing a weight.
 - **Decision:** record 50 per command (seeds are deterministic, so adding S1 episodes later gives the same episodes as recording them now). Train step 3 first without reweighting, as the baseline; count the stay/move frames at the decision state; then upsample (duplicate episodes in the view) if the stop or continue rate shows a lean.
+- **Outcome (step 3):** no lean: no S1 rollout continued and every T1 rollout did (results above), so no reweighting, and the frame count wasn't needed.
+
+**6. SmolVLA needs a rented GPU (measured 2026-11-01).** Fine-tuning `lerobot/smolvla_base` on `data/min` runs on this Mac's GPU (MPS): the camera rename works and the loss falls normally (2.0 → 0.8 in 40 steps). But it takes 4.3 s per step at batch 8 and 17.5 s at batch 32, the same 0.55 s per sample, so the GPU is saturated: LeRobot's recipe (batch 64 × 20k steps = 1.28M samples) would take ~8 days, against ~4 h on one A100 by LeRobot's SmolVLA guide (~5–7 h estimated on a 4090). A local AMD RX 6650 XT (8 GB, no official ROCm support) was ruled out: too little memory for the recipe and an estimated few days. Steps for a rented GPU: [cloud/README.md](cloud/README.md).
+
+**7. Encoder crash during recording.** A rare SVT-AV1 crash stopped the first step-2 recording; the recorder now retries a failed part ([2data_collection.md](2data_collection.md), "Encoder crash").
