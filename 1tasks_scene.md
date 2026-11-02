@@ -173,10 +173,11 @@ python -m sim.validate 40 all eval      # held-out colours and phrasings
 | `sim/check_data.py` | First-batch checks on a recorded dataset (images, actions, labels), see `2data_collection.md` |
 | `sim/colour_contrast.py` | Cube colour sweep: contrast of each palette (and rejected) colour with its surroundings on a recorded dataset, see `2data_collection.md`, "Cube colours" |
 | `sim/evaluate.py` | Policy rollouts in sim under the evaluation conditions in the plan (fixed horizon; success, stop rate, continue rate; `--temporal-ensemble` for ACT); logs each rollout's checks, cube slide and final position |
+| `sim/residual.py` | Residual RL (minimal plan step 5): base policy plans every `PLAN_EVERY` frames, a bounded residual corrects each frame; scored by the evaluation's `Tracker` |
 | `sim/dataset_view.py` | A training view of a recorded dataset: `--variant-input` (adds the one-hot variant vector as `observation.environment_state`), `--nominal` (train on `action_nominal`; used only in step 1) |
 | `scripts/` | The runs behind the results: `train_step1.sh` (step 1), `step2_3.sh` (steps 2–3, unattended: record, check, view, train, evaluate) |
 | `cloud/train.sh`, `cloud/README.md` | ACT or SmolVLA training on a rented CUDA GPU (LeRobot only; evaluation stays on the Mac), and the step-by-step instructions |
-| `tests/` | `test_workcell.py` (geometry, reach), `test_randomize.py` (randomisation, seeds), `test_tasks.py` (episodes, exact replay), `test_episode.py` (starts, success checks), `test_record.py` (recorder, dataset views), `test_evaluate.py` (rollout loop with the expert's commands) |
+| `tests/` | `test_workcell.py` (geometry, reach), `test_randomize.py` (randomisation, seeds), `test_tasks.py` (episodes, exact replay), `test_episode.py` (starts, success checks), `test_record.py` (recorder, dataset views), `test_evaluate.py` (rollout loop with the expert's commands), `test_residual.py` (the residual-RL episode) |
 | `deprecated/` | The earlier design; ignore |
 
 ## Minimal plan (active): one scene, S1 and T1
@@ -207,6 +208,19 @@ The full plan below records all 20 variants before reaching the VLA. This versio
 | 3 | — | ACT with the variant input (one-hot, as Meta-World MT10/MT50), all 6 variants | Success per variant, swap test, stop rate (S1) and continue rate (T1). **Done:** S1 72%, T1 97.5%; stop/continue and target follow the command |
 | 3b | — | Diffusion Policy with the same variant input, all 6 variants (added 2026-11-02) | As step 3: a second imitation-learning baseline on the same scene and input, so step 3's results aren't specific to ACT |
 | 4 | — | SmolVLA fine-tuned on the same 300 episodes, with the commands | Same, under the train, eval-colours and eval-phrasing conditions. The gap to step 3 (and 3b) on the train condition is the cost of reading language |
+
+| 5 | — | **Residual RL** on step 3's frozen ACT (added 2026-11-02, below) | Success per variant, and whether command-following survives RL: stop rate (S1), continue rate (T1), no wrong-side placements, held-out colours |
+
+**Step 5: residual RL (`sim/residual.py`).** The base policy (step 3's ACT, frozen) plans a chunk from the cameras every `PLAN_EVERY` = 25 frames; a small residual policy adds a bounded correction (≤ `RES_SCALE` = 0.05 rad per joint) to every frame's command, from the joints, the base command and the simulator's state (cube, drawer) plus the one-hot variant. Trained with PPO; reward: the episode's result as the evaluation scores it (success, and for S1 the stop too), once at the end. This follows ResiP (Ankile et al. 2024: a frozen chunked imitation policy plus a closed-loop residual trained with PPO, for precision the base lacks) and Policy Decorator (Yuan et al., ICLR 2025: a bounded residual on a frozen Diffusion Policy or Behavior Transformer). Why it fits here: step 3's failures are precision (S1's 5 mm slide, T1's near misses), the success checks already read only the simulator (no reward engineering), and the shared scene asks whether RL on a success reward keeps command-following (RL4VLA, Liu et al. 2025, reports RL fine-tuning improves VLAs' semantic generalisation; a policy that learns to always continue would show up at once in the S1 stop rate). Rendering only when the base plans makes an episode ~4 s (S1) instead of ~46 s.
+
+| Sub-step | What | Check |
+|---|---|---|
+| 5a | The episode wrapper (`sim/residual.py`), base alone | Done for the code (`tests/test_residual.py`: the expert's commands as base chunks succeed and stop; a zero residual changes nothing). Baseline still to run: the base alone at `PLAN_EVERY` 25 (and LeRobot's 100) on the 50 eval starts per variant, the fair comparison for the residual (not the temporally ensembled step-3 numbers) |
+| 5b | PPO residual on S1:A (the largest gap), training seeds only | Success rises; the slide shrinks towards the expert's (median 2.2 mm) |
+| 5c | The same on all 6 variants | As step 3, plus stop/continue and wrong-side rates before and after |
+| 5d (optional) | Distil base + residual back into a camera-only policy (as ResiP) | Removes the residual's use of simulator state |
+
+What to state with the results: the residual sees simulator state the camera policy doesn't (fine in a sim-only project, but it is privileged information); RL uses training seeds only.
 
 **Imbalance:** T1 has two thirds of the scene's episodes, so a policy that always continues may be rewarded (though by frames at the decision point, S1's 2 s hold may outweigh it). Recorded 50 per command and trained step 3 without reweighting: no lean (no S1 rollout continued, every T1 rollout did), so none is needed; research and decision in [3train_evaluation.md](3train_evaluation.md), finding 5.
 

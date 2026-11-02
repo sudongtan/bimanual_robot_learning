@@ -96,19 +96,60 @@ def observation(sim, qadr, renderers, command: str, variant_input=None) -> dict:
     return obs
 
 
+class Tracker:
+    """Everything a rollout records besides the final state, updated after every frame: the last 2 s (stop rate)
+    and, in a composite, whether the second arm leaves home after the first step (continue rate). Shared by
+    `rollout` and the residual-RL episodes (sim/residual.py), so both are scored the same way."""
+
+    def __init__(self, sim, variant):
+        self.variant = variant
+        self.arm_q = np.concatenate([sim.arms[a].qadr for a in sim.arms])
+        self.second = sim.arms[ARM_NAME[E.other(variant[1])]].qadr
+        self.q0 = sim.monitor.q0[ARM_NAME[E.other(variant[1])]]
+        self.hold = int(HOLD_S * R.FPS)
+        self.q_tail, self.items_tail = [], []
+        self.first_done, self.second_left = False, 0.0  # rad, the second arm's largest joint distance from its start
+
+    def update(self, sim):
+        self.q_tail = (self.q_tail + [sim.data.qpos[self.arm_q].copy()])[-self.hold:]
+        self.items_tail = (self.items_tail + [np.concatenate([sim.body_pos("cube"), [sim.drawer_opening()]])])[-self.hold:]
+        if self.variant[0] in FIRST_STEP_DONE:
+            self.first_done = self.first_done or bool(FIRST_STEP_DONE[self.variant[0]](sim))
+            if self.first_done:
+                self.second_left = max(self.second_left, float(np.abs(sim.data.qpos[self.second] - self.q0).max()))
+
+    def result(self, sim, start, seed) -> dict:
+        variant = self.variant
+        ok, checks = E.success(sim, start)
+        q_tail, items_tail = np.array(self.q_tail), np.array(self.items_tail)
+        still = (np.abs(q_tail - q_tail[0]).max() < HOLD_STILL
+                 and np.linalg.norm(items_tail[:, :3] - items_tail[0, :3], axis=1).max() < E.PUSHED
+                 and np.abs(items_tail[:, 3] - items_tail[0, 3]).max() < E.PUSHED)
+        result = {"variant": list(variant), "seed": seed, "command": start["command"],
+                  "cube_colour": start["scene"].get("cube_colour"), "success": ok, "checks": checks,
+                  # mm; how far the cube moved in the drawer (cube_kept_place fails above E.PUSHED; only meaningful for S1)
+                  "cube_slide_mm": 1000 * float(np.linalg.norm(E.cube_in_drawer_frame(sim) - start["cube_drawer_xy"])),
+                  # m, world frame; with the nearest named spot, tells a wrong target from a missed or dropped cube
+                  "cube_final": [round(float(x), 4) for x in sim.body_pos("cube")],
+                  "nearest_target": min(T.CUBE_TARGETS, key=lambda t: np.linalg.norm(sim.body_pos("cube")[:2] - T.CUBE_TARGETS[t]))}
+        if variant[0] in STOP_TASKS:
+            result["stopped"] = bool(ok and still)
+            result["held_still"] = bool(still)  # the last 2 s alone, whether or not the task succeeded
+        if variant[0] in FIRST_STEP_DONE:
+            result["continued"] = bool(self.first_done and self.second_left > E.IDLE_MOVE)
+        return result
+
+
 def rollout(policy, pre, post, variant, seed: int, rand: RZ.Randomization, video: bool = False) -> dict:
     sim, start = E.reset(variant, seed, dataclasses.replace(rand, demo_noise=0.0))
     sim.control_every = 1  # ctrl is set once per frame and held for CONTROL_EVERY steps below
     qadr = R.joint_qpos(sim)
-    arm_q = np.concatenate([sim.arms[a].qadr for a in sim.arms])
     size = getattr(policy, "image_size", (R.HEIGHT, R.WIDTH))
     renderers = {key: mujoco.Renderer(sim.model, *size) for key in R.CAMERAS}
     variant_input = RZ.variant_vector(*variant) if getattr(policy, "variant_input", False) else None
-    second = sim.arms[ARM_NAME[E.other(variant[1])]].qadr
-    first_done, second_left = False, 0.0  # rad, the second arm's largest joint distance from its start after the first step
+    tracker = Tracker(sim, variant)
     policy.reset()
-    hold = int(HOLD_S * R.FPS)
-    q_tail, items_tail, frames = [], [], []
+    frames = []
     for _ in range(HORIZON[variant[0]]):
         obs = observation(sim, qadr, renderers, start["command"], variant_input)
         if video:
@@ -117,33 +158,10 @@ def rollout(policy, pre, post, variant, seed: int, rand: RZ.Randomization, video
             action = post(policy.select_action(pre(obs)))
         sim.data.ctrl[:] = action[0].cpu().numpy()
         sim.step(CONTROL_EVERY)
-        q_tail = (q_tail + [sim.data.qpos[arm_q].copy()])[-hold:]
-        items_tail = (items_tail + [np.concatenate([sim.body_pos("cube"), [sim.drawer_opening()]])])[-hold:]
-        if variant[0] in FIRST_STEP_DONE:
-            first_done = first_done or bool(FIRST_STEP_DONE[variant[0]](sim))
-            if first_done:
-                q0 = sim.monitor.q0[ARM_NAME[E.other(variant[1])]]
-                second_left = max(second_left, float(np.abs(sim.data.qpos[second] - q0).max()))
+        tracker.update(sim)
     for r in renderers.values():
         r.close()
-    ok, checks = E.success(sim, start)
-    q_tail, items_tail = np.array(q_tail), np.array(items_tail)
-    still = (np.abs(q_tail - q_tail[0]).max() < HOLD_STILL
-             and np.linalg.norm(items_tail[:, :3] - items_tail[0, :3], axis=1).max() < E.PUSHED
-             and np.abs(items_tail[:, 3] - items_tail[0, 3]).max() < E.PUSHED)
-    result = {"variant": list(variant), "seed": seed, "command": start["command"],
-              "cube_colour": start["scene"].get("cube_colour"), "success": ok, "checks": checks,
-              # mm; how far the cube moved in the drawer (cube_kept_place fails above E.PUSHED; only meaningful for S1)
-              "cube_slide_mm": 1000 * float(np.linalg.norm(E.cube_in_drawer_frame(sim) - start["cube_drawer_xy"])),
-              # m, world frame; with the nearest named spot, tells a wrong target from a missed or dropped cube
-              "cube_final": [round(float(x), 4) for x in sim.body_pos("cube")],
-              "nearest_target": min(T.CUBE_TARGETS, key=lambda t: np.linalg.norm(sim.body_pos("cube")[:2] - T.CUBE_TARGETS[t]))}
-    if variant[0] in STOP_TASKS:
-        result["stopped"] = bool(ok and still)
-        result["held_still"] = bool(still)  # the last 2 s alone, whether or not the task succeeded
-    if variant[0] in FIRST_STEP_DONE:
-        result["continued"] = bool(first_done and second_left > E.IDLE_MOVE)
-    return result, frames
+    return tracker.result(sim, start, seed), frames
 
 
 def main():
