@@ -40,7 +40,7 @@ DEMO_NOISE = 0.008  # rad, σ of the demonstration noise, as validated in the de
 NOISE_TAU = 0.25  # s, correlation time of demonstration noise (smooth drift, not jitter)
 NOISE_RAMP = 0.2  # s, demonstration noise fades in/out over this time
 CONTROL_EVERY = 10  # physics steps per command for recorded episodes: 50 Hz zero-order hold, one command per
-# 50 fps frame, as ACT's scripted sim policy (2data_collection.md, design point 1)
+# 50 fps frame, as ACT's scripted sim policy (docs/2data_collection.md, design point 1)
 # What Sim.step saves before each tick: the full physics state plus the solver's warm start, so replaying the
 # recorded commands from it is exact. Not ctrl: that is the recorded action.
 STATE_SPEC = mujoco.mjtState.mjSTATE_FULLPHYSICS | mujoco.mjtState.mjSTATE_WARMSTART

@@ -9,7 +9,7 @@ Goal: collect scripted bimanual demos in sim of four primitive skills and two co
 The workcell, a scripted expert for all six tasks, the per-episode randomisation, the recorder and the success checks (which score a policy the same way as the expert, `sim/episode.py`) are built and validated. The step-0 batch is recorded and checked ([2data_collection.md](2data_collection.md)). Working to the **minimal plan** (below); results in [3train_evaluation.md](3train_evaluation.md):
 - **Step 1 done:** ACT on S1 arm A, 88% (44/50) on eval starts, all successes stopped, with temporal ensembling. Training on `action_nominal` gave 82%, no real difference, so `action` is kept.
 - **Steps 2–3 done:** `data/min` (300 episodes); one ACT with the one-hot variant input: S1 72/100, T1 195/200, stop and continue follow the command every time (no S1 rollout took the cube out, every T1 rollout continued, no cube on the wrong side). All S1 failures are the 5 mm slide limit.
-- **Now: step 4 and 3b** on a rented RTX 4090 ([cloud/README.md](cloud/README.md)): SmolVLA training (~5 h), then Diffusion Policy with the one-hot input (step 3b). Both are evaluated on the Mac.
+- **Now: step 4 and 3b** on a rented RTX 4090 ([4cloud_training.md](4cloud_training.md)): SmolVLA training (~5 h), then Diffusion Policy with the one-hot input (step 3b). Both are evaluated on the Mac.
 
 Validation, `python -m sim.validate 40` (40 random starts per arm and per target, all randomisation on, expert at 50 Hz as recorded):
 
@@ -176,7 +176,7 @@ python -m sim.validate 40 all eval      # held-out colours and phrasings
 | `sim/residual.py` | Residual RL (minimal plan step 5): base policy plans every `PLAN_EVERY` frames, a bounded residual corrects each frame; scored by the evaluation's `Tracker` |
 | `sim/dataset_view.py` | A training view of a recorded dataset: `--variant-input` (adds the one-hot variant vector as `observation.environment_state`), `--nominal` (train on `action_nominal`; used only in step 1) |
 | `scripts/` | The runs behind the results: `train_step1.sh` (step 1), `step2_3.sh` (steps 2–3, unattended: record, check, view, train, evaluate) |
-| `cloud/train.sh`, `cloud/README.md` | ACT or SmolVLA training on a rented CUDA GPU (LeRobot only; evaluation stays on the Mac), and the step-by-step instructions |
+| `cloud/train.sh`, `4cloud_training.md` | ACT or SmolVLA training on a rented CUDA GPU (LeRobot only; evaluation stays on the Mac), and the step-by-step instructions |
 | `tests/` | `test_workcell.py` (geometry, reach), `test_randomize.py` (randomisation, seeds), `test_tasks.py` (episodes, exact replay), `test_episode.py` (starts, success checks), `test_record.py` (recorder, dataset views), `test_evaluate.py` (rollout loop with the expert's commands), `test_residual.py` (the residual-RL episode) |
 | `deprecated/` | The earlier design; ignore |
 
@@ -229,7 +229,7 @@ What to state with the results: the residual sees simulator state the camera pol
 **Code for the minimal plan (written and checked end to end):**
 - Variant input: `RZ.variant_vector` (11 dims, `VARIANT_DIMS`), added to a dataset by `python -m sim.dataset_view SRC DST --variant-input` as `observation.environment_state`, which LeRobot's ACT takes as an extra encoder input, unnormalised. `sim/evaluate.py` supplies it when the policy has it. Checked: ACT trains on it, and a rollout gets the vector.
 - Continue rate in `sim/evaluate.py`: once T1's drawer is open (or T2's cube is in), the second arm leaves home before the horizon ends. `test_expert_commands_succeed_in_rollout` replays S1 (stops) and T1 (continues).
-- SmolVLA: `bash cloud/train.sh smolvla DATASET OUT` fine-tunes `lerobot/smolvla_base` (LeRobot's recipe: batch 64, 20k steps), mapping our cameras onto its `camera1`–`camera3`. Checked on the Mac (training on MPS, then a rollout through `sim/evaluate.py`). The recipe needs a CUDA GPU: on this Mac's GPU it takes 0.55 s per sample whatever the batch, ~8 days for the 1.28M samples (3train_evaluation.md, finding 6). Steps: [cloud/README.md](cloud/README.md).
+- SmolVLA: `bash cloud/train.sh smolvla DATASET OUT` fine-tunes `lerobot/smolvla_base` (LeRobot's recipe: batch 64, 20k steps), mapping our cameras onto its `camera1`–`camera3`. Checked on the Mac (training on MPS, then a rollout through `sim/evaluate.py`). The recipe needs a CUDA GPU: on this Mac's GPU it takes 0.55 s per sample whatever the batch, ~8 days for the 1.28M samples (3train_evaluation.md, finding 6). Steps: [4cloud_training.md](4cloud_training.md).
 
 ## Full plan (on hold beyond the minimal version): data and training, step by step
 

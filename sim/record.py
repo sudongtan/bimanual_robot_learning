@@ -1,4 +1,4 @@
-"""Record scripted episodes as one LeRobot dataset (design: 2data_collection.md).
+"""Record scripted episodes as one LeRobot dataset (design: docs/2data_collection.md).
 
     python -m sim.record data/pilot --per-variant 5                  # step 0: 5 of each of the 20 variants
     python -m sim.record data/s1a --variants S1:A --per-variant 50   # plan step 1
@@ -46,7 +46,7 @@ from sim.scene import CONTROL_EVERY, STATE_SPEC
 from sim.validate import config
 
 FPS = 50
-HEIGHT, WIDTH = 240, 320  # half ACT/ALOHA's 480 x 640, for training speed (2data_collection.md, design point 4); --size
+HEIGHT, WIDTH = 240, 320  # half ACT/ALOHA's 480 x 640, for training speed (docs/2data_collection.md, design point 4); --size
 CAMERAS = {"overview": "overview", "left_wrist": "left/wrist_cam", "right_wrist": "right/wrist_cam"}
 REPO_ID = "local/bimanual_so101"
 ROBOT_TYPE = "bimanual_so101_sim"

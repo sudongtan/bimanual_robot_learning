@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Train on a rented CUDA GPU (1tasks_scene.md, "Minimal plan"). Training needs LeRobot only, not MuJoCo;
+# Train on a rented CUDA GPU (docs/1tasks_scene.md, "Minimal plan"). Training needs LeRobot only, not MuJoCo;
 # evaluation stays on the Mac (python -m sim.evaluate CKPT ...).
 #
 #   Mac:  rsync -aL --exclude sim data/min HOST:bimanual/data/     # the LeRobot dataset (~2.5 GB; sim/ is the recorder's states, not needed)

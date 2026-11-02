@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Quick check on the rented GPU before a real run (cloud/README.md, step 6): 30 training steps through train.sh, at
+# Quick check on the rented GPU before a real run (docs/4cloud_training.md, step 6): 30 training steps through train.sh, at
 # the policy's batch and, if that runs out of memory, at half of it. Exercises everything the real run needs: the
 # install, the base-model download, video decoding, the GPU, memory and saving a checkpoint. Prints which batch to
 # use and the full run's time, and writes the real run's command to smoke_next_<policy>.sh. ~5-10 min the first time
@@ -20,7 +20,7 @@ base=${batches%% *}
 
 echo "== GPU"
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader || { echo "FAIL: no NVIDIA GPU visible"; exit 1; }
-[ -f "$root/meta/info.json" ] || { echo "FAIL: no dataset at $root (copy it first: cloud/README.md, step 5)"; exit 1; }
+[ -f "$root/meta/info.json" ] || { echo "FAIL: no dataset at $root (copy it first: docs/4cloud_training.md, step 5)"; exit 1; }
 echo "dataset: $root, $(grep -o '"total_episodes": [0-9]*' "$root/meta/info.json")"
 
 for bs in $batches; do

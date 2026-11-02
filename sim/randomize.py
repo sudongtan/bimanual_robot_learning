@@ -1,4 +1,4 @@
-"""Per-episode randomisation (the Randomisation section of 1tasks_scene.md).
+"""Per-episode randomisation (the Randomisation section of docs/1tasks_scene.md).
 
 `Randomization` is the one place every factor is configured. Each can be switched off, so factors
 can be added and validated one at a time. Where each is drawn:
@@ -29,7 +29,7 @@ from sim.tasks import yaw_quat
 
 # Every colour stands out from everything around the cube (median rendered RGB distance >= 0.45 from
 # the arms' yellow parts and black motors, the table, drawer, handle and cabinet, measured on A0
-# frames; 2data_collection.md, "Cube colours"). Yellow/orange (as the arms), black (as the handle and
+# frames; docs/2data_collection.md, "Cube colours"). Yellow/orange (as the arms), black (as the handle and
 # motors), pink, lime and white failed. Train and eval colours don't overlap, and each eval colour
 # sits between training colours (>= 0.29 RGB distance from the nearest), so eval tests unseen colours,
 # not an unseen hue family. 6 and 4 colours, as before, so every seed draws the same start.
@@ -66,11 +66,11 @@ HEADLIGHT_DIFFUSE = (0.4, 0.7)  # scene default 0.6
 HEADLIGHT_AMBIENT = (0.2, 0.4)  # scene default 0.3
 
 # The 20 variants (task, arm, target): one exact command each. arm is the opener in T1 and the placer in T2;
-# target is None except in S4 and T1. Same order as the one-hot variant input (1tasks_scene.md).
+# target is None except in S4 and T1. Same order as the one-hot variant input (docs/1tasks_scene.md).
 TARGETS = ("left", "middle", "right")
 VARIANTS = tuple((task, arm, target) for task in ("S1", "S2", "S3", "S4", "T1", "T2") for arm in ("A", "B")
                  for target in (TARGETS if task in ("S4", "T1") else (None,)))
-# The variant input for ACT/DP (1tasks_scene.md, "Variant input"): one-hot task, arm (the opener in T1, the
+# The variant input for ACT/DP (docs/1tasks_scene.md, "Variant input"): one-hot task, arm (the opener in T1, the
 # placer in T2) and target (all zero for tasks without one), as Meta-World MT10/MT50 adds a task ID.
 VARIANT_DIMS = ("S1", "S2", "S3", "S4", "T1", "T2", "A", "B") + TARGETS
 
@@ -98,7 +98,7 @@ def train_seeds(task: str, arm: str, target: str | None = None) -> range:
     k = VARIANTS.index((task, arm, target))
     return range(TRAIN_SEEDS.start + k * TRAIN_BLOCK, TRAIN_SEEDS.start + (k + 1) * TRAIN_BLOCK)
 
-# Command paraphrases per task. The first is the canonical command (1tasks_scene.md); the last is
+# Command paraphrases per task. The first is the canonical command (docs/1tasks_scene.md); the last is
 # held out for the eval split.
 COMMANDS = {
     "S1": ("open the drawer with arm {arm}",
@@ -133,7 +133,7 @@ class Randomization:
     lighting: bool = True
     wording: bool = True
     split: str = "train"  # "train" or "eval": eval uses the held-out colours and phrasings
-    # One factor held out on its own (the evaluation conditions in 1tasks_scene.md): "train" or "eval"
+    # One factor held out on its own (the evaluation conditions in docs/1tasks_scene.md): "train" or "eval"
     # overrides `split` for that factor; None follows `split`.
     colours_split: str | None = None
     wording_split: str | None = None

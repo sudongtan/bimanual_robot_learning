@@ -1,4 +1,4 @@
-"""Per-episode randomisation (sim/randomize.py, Randomisation in 1tasks_scene.md).
+"""Per-episode randomisation (sim/randomize.py, Randomisation in docs/1tasks_scene.md).
 
 Checks that every draw stays inside its stated range, that distractors sit on the table clear of
 everything, that the train/eval splits don't share colours or phrasings, and that a rotated cube

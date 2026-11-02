@@ -1,4 +1,4 @@
-"""Residual RL on a frozen imitation policy (minimal plan step 5, 1tasks_scene.md).
+"""Residual RL on a frozen imitation policy (minimal plan step 5, docs/1tasks_scene.md).
 
 The base policy (step 3's ACT with the one-hot input) plans a chunk of actions from the three cameras every
 PLAN_EVERY frames, as LeRobot runs ACT without temporal ensembling but replanning sooner. A residual adds a bounded

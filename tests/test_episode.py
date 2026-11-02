@@ -19,7 +19,7 @@ def scene(sim):
 
 @pytest.mark.parametrize("seed", (0, 1, 2, 3))
 def test_shared_scenes_same_start(seed):
-    """Variants that share a start scene get the same start for the same seed (1tasks_scene.md)."""
+    """Variants that share a start scene get the same start for the same seed (docs/1tasks_scene.md)."""
     def start(variant):
         return scene(E.reset(variant, seed)[0])
 

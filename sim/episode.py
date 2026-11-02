@@ -1,6 +1,6 @@
 """What every episode needs whoever acts, the scripted expert (sim/skills.py) or a learned policy: the
 variant's start state, monitors that run every physics step, and the task's success check
-(1tasks_scene.md). Nothing here reads the expert's plan, so a policy rollout is scored exactly as a
+(docs/1tasks_scene.md). Nothing here reads the expert's plan, so a policy rollout is scored exactly as a
 demonstration is, as LIBERO's and ManiSkill's success checks read only the simulator.
 
     sim, start = reset(("S4", "A", "left"), seed, rand)   # start scene drawn from the seed, settled
@@ -71,7 +71,7 @@ def reset(variant, seed: int, rand: Randomization = Randomization()) -> tuple[Si
     start for the same seed), with a fresh Monitor attached. Returns the Sim and `start`: what the
     success check compares against, plus the episode's command and what the randomisation drew.
 
-    Three start scenes (1tasks_scene.md): drawer closed with the cube inside (S1, T1); drawer partly
+    Three start scenes (docs/1tasks_scene.md): drawer closed with the cube inside (S1, T1); drawer partly
     open with the cube on the table (S3, T2, and half of S2); drawer fully open with the cube inside
     (S4, and the other half of S2)."""
     task = variant[0]
@@ -147,7 +147,7 @@ def cube_on_table_at(sim: Sim, xy, tol: float = 0.02) -> bool:
 
 
 def success(sim: Sim, start: dict) -> tuple[bool, dict]:
-    """The task's success check (1tasks_scene.md) at the end of an episode, from the simulator state,
+    """The task's success check (docs/1tasks_scene.md) at the end of an episode, from the simulator state,
     `start` and the Monitor alone. Returns whether every check passed, and each check by name."""
     task, arm, target = start["variant"]
     m = sim.monitor

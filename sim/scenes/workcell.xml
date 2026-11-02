@@ -1,5 +1,5 @@
 <!--
-  Workcell for the hackathon task set (1tasks_scene.md): two SO-101 arms facing each other across a
+  Workcell for the hackathon task set (docs/1tasks_scene.md): two SO-101 arms facing each other across a
   table, a one-drawer cabinet on the tabletop at the back centre, and a 4 cm cube.
   (A 4 x 4 x 6 cm block tipped over when put down at the 20° grasp tilt.)
 
@@ -98,7 +98,7 @@
       <geom name="cube" type="box" size="0.02 0.02 0.02" mass="0.03" rgba="0.85 0.2 0.15 1"/>
     </body>
 
-    <!-- Distractors (Randomisation in 1tasks_scene.md): round shapes, nothing cube-like
+    <!-- Distractors (Randomisation in docs/1tasks_scene.md): round shapes, nothing cube-like
          (RoboTwin's rule). Parked on the floor; sim/randomize.py puts 0-2 of them on the table. -->
     <body name="puck" pos="1.0 1.4 0.007">
       <freejoint name="puck"/>

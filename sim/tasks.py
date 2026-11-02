@@ -1,4 +1,4 @@
-"""Grasp planning and task geometry for the workcell (tasks S1-S4, T1, T2 in 1tasks_scene.md).
+"""Grasp planning and task geometry for the workcell (tasks S1-S4, T1, T2 in docs/1tasks_scene.md).
 
 Grasps are fixed per target so demonstrations stay consistent:
     cube:   from above, tilted CUBE_TILT outward along the arm's reach direction, fingertips

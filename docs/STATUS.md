@@ -2,7 +2,7 @@
 
 _Last updated: 2026-11-02 11:55 CET. Update this file whenever a job starts or ends._
 
-Where the project stands, what is running right now, and what comes next. The design is in the numbered docs (README.md, "Documents"); this file is only the live state.
+Where the project stands, what is running right now, and what comes next. The design is in the numbered docs (../README.md, "Documents"); this file is only the live state.
 
 ## Done (minimal plan, 1tasks_scene.md)
 
@@ -25,7 +25,7 @@ Where the project stands, what is running right now, and what comes next. The de
 
 ## Next
 
-1. When SmolVLA ends: copy `checkpoints/last/pretrained_model` back (cloud/README.md, step 10), then evaluate it on the Mac under train, eval_colours and eval_wording (step 12) once the colour run above has finished (one GPU job at a time on the Mac).
+1. When SmolVLA ends: copy `checkpoints/last/pretrained_model` back (4cloud_training.md, step 10), then evaluate it on the Mac under train, eval_colours and eval_wording (step 12) once the colour run above has finished (one GPU job at a time on the Mac).
 2. When DP ends: copy it back the same way (`outputs/min_dp`), then ask the user to delete the instance. DP evaluation is slow on the Mac (~146 s per S1 rollout, ~a day for 300); options to decide with the user: fewer denoising steps at inference (DDIM; a method change to report) or evaluating on the rented machine (untested headless MuJoCo rendering).
 3. Step 5 (residual RL, 1tasks_scene.md): after the 5a baseline, write the PPO trainer (5b, S1:A first). The Mac's GPU is shared with the SmolVLA evaluation, so schedule one at a time.
 4. Record each result in 3train_evaluation.md and the status lines in README.md, 1tasks_scene.md and this file.

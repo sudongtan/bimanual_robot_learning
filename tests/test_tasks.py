@@ -30,7 +30,7 @@ def check(r):
 @pytest.mark.slow
 def test_hold_is_recorded():
     """The recorder sees the HOLD_S hold at the end of the episode, with both arms still at home
-    (so "stay" after the task is in the training data: the stop tests in 1tasks_scene.md)."""
+    (so "stay" after the task is in the training data: the stop tests in docs/1tasks_scene.md)."""
     qs = []
     r = K.run_S1("A", seed=0, rec=lambda s: qs.append(np.concatenate([s.q(a) for a in s.arms])))
     check(r)
@@ -45,7 +45,7 @@ def test_hold_is_recorded():
                                  lambda rec: K.run_T1("B", "left", seed=1, rec=rec)), ids=("S1", "T1"))
 def test_replay_is_exact(run):
     """Each command is held for CONTROL_EVERY steps (50 Hz), and replaying the recorded commands from
-    the recorded start reproduces every recorded state (2data_collection.md, first-batch check 1)."""
+    the recorded start reproduces every recorded state (docs/2data_collection.md, first-batch check 1)."""
     f = Frames()
     check(run(f))
     assert f.held

@@ -1,4 +1,4 @@
-"""Cube colour sweep on a recorded dataset (2data_collection.md, "Cube colours").
+"""Cube colour sweep on a recorded dataset (docs/2data_collection.md, "Cube colours").
 
     python -m sim.colour_contrast data/a0               # report in data/a0/check/colours.txt
     python -m sim.colour_contrast data/a0 --stride 10   # every 10th frame (default 20)
@@ -27,7 +27,7 @@ from sim import randomize as RZ
 from sim import record as R
 from sim.scene import STATE_SPEC
 
-# Measured and rejected (2data_collection.md, "Cube colours"); the old palette's colours among them.
+# Measured and rejected (docs/2data_collection.md, "Cube colours"); the old palette's colours among them.
 REJECTED = {
     "orange": (0.95, 0.55, 0.10), "yellow": (0.95, 0.85, 0.15), "purple": (0.55, 0.30, 0.75),
     "pink": (0.95, 0.45, 0.70), "lime": (0.65, 0.90, 0.20), "black": (0.10, 0.10, 0.10),

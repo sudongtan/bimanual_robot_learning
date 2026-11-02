@@ -2,7 +2,7 @@
 
 Minimal-plan step 4: fine-tune SmolVLA on `data/min` on a rented GPU, then evaluate it on the Mac.
 
-- **Why rent:** LeRobot's recipe (batch 64, 20k steps) would take ~8 days on the Mac. It takes ~4 h on one A100 by LeRobot's SmolVLA guide, or an estimated 5–7 h on an RTX 4090 ([3train_evaluation.md](../3train_evaluation.md), finding 6).
+- **Why rent:** LeRobot's recipe (batch 64, 20k steps) would take ~8 days on the Mac. It takes ~4 h on one A100 by LeRobot's SmolVLA guide, or an estimated 5–7 h on an RTX 4090 ([3train_evaluation.md](3train_evaluation.md), finding 6).
 - **What runs where:** training needs only LeRobot and the dataset. Evaluation needs MuJoCo and `sim/`, so it stays on the Mac.
 - **Expect:** ~30 min of your time, plus 4–7 h of training. The cost is a few dollars at typical 4090/A100 rates; check the provider's current prices.
 
@@ -192,7 +192,7 @@ Multiply the one-rollout time by 900 to see how long this will run. `caffeinate`
 
 - **Where:** `outputs/min_smolvla/eval/<condition>/summary.json` gives success, stop rate (S1) and continue rate (T1) per variant; `episodes.jsonl` gives every rollout.
 - **Compare the train condition with step 3's ACT** (`outputs/min_act/eval_100000_te/train/summary.json`). The gap is the cost of reading the command in language instead of a one-hot input.
-- **Record them:** add the results to [3train_evaluation.md](../3train_evaluation.md) under a step 4 section.
+- **Record them:** add the results to [3train_evaluation.md](3train_evaluation.md) under a step 4 section.
 
 ---
 

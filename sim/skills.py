@@ -1,4 +1,4 @@
-"""Scripted skills for the tasks in 1tasks_scene.md, built from the patterns validated in deprecated/sim/expert.py:
+"""Scripted skills for the tasks in docs/1tasks_scene.md, built from the patterns validated in deprecated/sim/expert.py:
 joint-space moves to a hover point (with demonstration noise), straight lines for precise moves
 (no noise), one fixed grasp per target, and every skill starts and ends with the arm at home.
 
@@ -24,7 +24,7 @@ HOVER = 0.05  # m above the pre-grasp, reached in joint space
 CARRY_Z = 0.08  # m, fingertip height above the tabletop while carrying the cube
 PULL_PAST = 0.01  # m past the drawer's end stop that a full opening aims for (see move_drawer)
 HOLD_S = 2.0  # s, recorded hold with both arms at home at the end of every task: one ACT action chunk
-# (100 frames at 50 fps), so a policy is trained on staying still after the task (stop tests, 1tasks_scene.md)
+# (100 frames at 50 fps), so a policy is trained on staying still after the task (stop tests, docs/1tasks_scene.md)
 HOLD_STILL = 0.05  # rad; a joint moving farther than this during the hold fails the episode (same as the stop test)
 
 
@@ -183,7 +183,7 @@ def finish(sim: Sim, start: dict, info: dict, rec=None) -> dict:
     return result
 
 
-# --- tasks (1tasks_scene.md); each start is drawn in sim.episode.reset -----------------------------
+# --- tasks (docs/1tasks_scene.md); each start is drawn in sim.episode.reset -----------------------------
 
 
 def run_S1(arm: str, seed: int = 0, rec=None,
@@ -244,7 +244,7 @@ def run_T1(opener: str, target: str = "middle", seed: int = 0, rec=None,
     sim, start = E.reset(("T1", opener, target), seed, rand)
     picker = other(opener)
     opened = move_drawer(sim, ARM_NAME[opener], T.DRAWER_OPEN, rec)
-    sim.subtask = 1  # the opener is home: the S4 part (2data_collection.md, design point 5)
+    sim.subtask = 1  # the opener is home: the S4 part (docs/2data_collection.md, design point 5)
     sim.step(100, rec)
     picked = opened and pick_cube(sim, ARM_NAME[picker], rec)
     if picked:
@@ -259,7 +259,7 @@ def run_T2(placer: str, seed: int = 0, rec=None,
     drawer."""
     sim, start = E.reset(("T2", placer, None), seed, rand)
     placed = put_cube_in_drawer(sim, ARM_NAME[placer], rec)
-    sim.subtask = 1  # the placer is home: the S2 part (2data_collection.md, design point 5)
+    sim.subtask = 1  # the placer is home: the S2 part (docs/2data_collection.md, design point 5)
     sim.step(100, rec)
     if placed:
         move_drawer(sim, ARM_NAME[other(placer)], 0.0, rec)

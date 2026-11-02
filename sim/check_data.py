@@ -1,4 +1,4 @@
-"""First-batch checks on a recorded dataset (2data_collection.md, "Checks on the first batch").
+"""First-batch checks on a recorded dataset (docs/2data_collection.md, "Checks on the first batch").
 
     python -m sim.check_data data/a0                # all checks; report and contact sheets in data/a0/check/
     python -m sim.check_data data/a0 --no-sheets    # skip the contact sheets (decoding video is the slow part)

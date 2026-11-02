@@ -1,4 +1,4 @@
-"""Workcell scene checks for the task set in 1tasks_scene.md (S1-S4, T1, T2).
+"""Workcell scene checks for the task set in docs/1tasks_scene.md (S1-S4, T1, T2).
 
 Fast tests check layout, rest behaviour and that every pose a task needs is reachable by
 BOTH arms with a collision-free open gripper (commands can name either arm).

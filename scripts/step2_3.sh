@@ -1,7 +1,7 @@
 #!/bin/zsh
-# Minimal plan steps 2-3 (1tasks_scene.md), unattended (run: caffeinate -i -s zsh scripts/step2_3.sh): record the 6 variants (50 each; S1:A repeats data/s1a's
+# Minimal plan steps 2-3 (docs/1tasks_scene.md), unattended (run: caffeinate -i -s zsh scripts/step2_3.sh): record the 6 variants (50 each; S1:A repeats data/s1a's
 # seeds, so its episodes are identical), check them, add the one-hot variant input, train ACT, evaluate.
-# Imbalance: no reweighting in this baseline (3train_evaluation.md, finding 5).
+# Imbalance: no reweighting in this baseline (docs/3train_evaluation.md, finding 5).
 set -u
 cd "$(dirname "$0")/.."
 V=S1:A,S1:B,T1:A:left,T1:A:right,T1:B:left,T1:B:right

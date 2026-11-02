@@ -1,4 +1,4 @@
-"""Policy rollouts in sim under the evaluation conditions (1tasks_scene.md, "Plan").
+"""Policy rollouts in sim under the evaluation conditions (docs/1tasks_scene.md, "Plan").
 
     python -m sim.evaluate outputs/s1a_act/checkpoints/last/pretrained_model --variants S1:A
     python -m sim.evaluate CKPT --variants S1:A --condition eval_colours --episodes 50 --videos 3
@@ -8,7 +8,7 @@ renders the three cameras as the recorder does, and sends the policy's command t
 held for CONTROL_EVERY steps (50 Hz, as recorded). No demonstration noise: that is the expert's.
 Rollouts don't stop at success; each runs HORIZON frames, the task's longest demonstration (with
 its 2 s hold) plus 2 s, as CALVIN gives each subtask a fixed horizon, and `success` is checked at
-the end. Two more rates for the scenes where a primitive ends as a composite continues (1tasks_scene.md,
+the end. Two more rates for the scenes where a primitive ends as a composite continues (docs/1tasks_scene.md,
 "Horizon and stopping"):
     stop rate (S1, S3)       success, and in the last 2 s no arm joint moves > HOLD_STILL and the cube
                              and drawer move < PUSHED (the expert's hold check)
@@ -47,7 +47,7 @@ from sim.dataset_view import ENV
 from sim.scene import ARM_NAME, CONTROL_EVERY
 from sim.skills import HOLD_S, HOLD_STILL
 
-# Longest demonstration per task in frames, with the hold (2data_collection.md, "Hook"; S2 over both
+# Longest demonstration per task in frames, with the hold (docs/2data_collection.md, "Hook"; S2 over both
 # start kinds), plus 2 s.
 DEMO_FRAMES = {"S1": 524, "S2": 520, "S3": 644, "S4": 586, "T1": 1020, "T2": 1056}
 HORIZON = {task: n + 2 * R.FPS for task, n in DEMO_FRAMES.items()}

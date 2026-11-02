@@ -6,7 +6,7 @@
 
 --nominal          LeRobot trains on the `action` column; swap `action` and `action_nominal` (frames,
                    dataset and per-episode statistics), so the same training command trains on the
-                   expert's command without demonstration noise (DART's clean labels; 2data_collection.md,
+                   expert's command without demonstration noise (DART's clean labels; docs/2data_collection.md,
                    design point 2).
 --variant-input    add `observation.environment_state`, the one-hot variant vector (RZ.variant_vector,
                    from each frame's variant_index). LeRobot's ACT and DP take it as an extra encoder
