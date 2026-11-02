@@ -66,7 +66,32 @@ The task input works already: every S1 success stops and every T1 rollout contin
 
 - **The command picks the task and the target.** From one start scene, no S1 rollout took the cube out (every S1 slide ≤ 6.3 mm: the cube stayed in the drawer), every T1 rollout continued to the hand-over (200/200), and no T1 cube ended at the other target (0/200 wrong side; `nearest_target`). So the imbalance (finding 5) produced no lean either way, and no reweighting is needed.
 - **T1: 195/200 (97.5%).** The 5 failures: 3 near misses for T1:B:left (cube 0.5-2.8 cm from its spot, or not upright), and one start (seed 100000) where both arm-A commands left the cube in the drawer after the second arm's grasp missed (video `T1_A_left_100000_fail.mp4`).
-- **S1: 72/100, every failure the 5 mm slide limit.** All S1 failures slid the cube 5.0-6.3 mm. S1:A is below the single-task policy of step 1 (88%), with a harder pull (median slide 4.9 mm vs 4.2; S1:B 4.3). Likely cause: S1's frames are seen ~3 times here against ~30 in step 1. Not tested yet; the stop rate equals success because it requires it, so it doesn't separate "held still" from the slide.
+- **S1: 72/100, every failure the 5 mm slide limit.** All S1 failures slid the cube 5.0-6.3 mm. S1:A is below the single-task policy of step 1 (88%), with a harder pull (median slide 4.9 mm vs 4.2; S1:B 4.3). Possibly because S1's frames are seen ~3 times here against ~30 in step 1; not tested, and not worth a longer run (finding 9: the gap is the pull, not the task); the stop rate equals success because it requires it, so it doesn't separate "held still" from the slide.
+
+**Held-out colours, same 100k checkpoint (`--condition eval_colours`, 50 per variant, `eval_100000_te/eval_colours`, finished 2026-11-02 17:58):**
+
+| Variant | Held-out colours | Train colours | Failed checks (held-out) |
+|---|---|---|---|
+| S1:A | 32/50 (64%) | 30/50 | cube_kept_place 18 (5.1-6.5 mm); held still 50/50 |
+| S1:B | 45/50 (90%) | 42/50 | cube_kept_place 5 (5.0-6.2 mm); held still 50/50 |
+| T1:A:left | 49/50 | 49/50 | cube_at_target 1 (seed 100000, cube left in the drawer, as with train colours) |
+| T1:A:right | 49/50 | 49/50 | cube_at_target 1 (seed 100000, the same) |
+| T1:B:left | 46/50 | 47/50 | cube_at_target 4, all near misses at the left spot |
+| T1:B:right | 50/50 | 50/50 | — |
+
+**No colour gap.** Held-out T1 194/200 against 195/200; every T1 rollout continued and none ended on the wrong side; S1 held still 100/100 and failed only by the slide. T1 is the part that tests colour, since the second arm has to find and grasp the cube; S1 needs only the handle. As in step 1 (88% both ways), unseen cube colours don't hurt ACT here.
+
+
+### Minimal plan step 3b: Diffusion Policy with the one-hot input (training, interim checks)
+
+Training on the rented 4090 (`outputs/min_dp`, 100k steps at batch 64, 0.33 s per step, ends ~2026-11-03 00:55). Early checks with `scripts/check_dp.sh` (finding 10): offline replay of 6 training episodes and 3 rollouts each of S1:A and T1:A:left, on the CPU (~2.5 min per S1 rollout, ~4.5 min per T1).
+
+| Checkpoint | Passes over `data/min` | Replay error, mean (worst joint) | S1:A | T1:A:left |
+|---|---|---|---|---|
+| 5k | ~1.3 | 0.018-0.033 rad (0.04-0.07, the wrist) | 0/3: drawer not opened, the other arm left home | 0/3: cube not at target |
+| 20k | ~5 | 0.010-0.016 rad (0.02-0.03) | 0/3: drawer opened, but **the other arm left home** every time (stop 0/3) | 0/3: 2 carried the cube to the left side but 3.5 cm past the spot (limit 2 cm); 1 never started the second arm |
+
+DP is learning (the replay error halved, the drawer now opens, the cube goes to the commanded side). The lead to check at 100k: under the S1 command DP goes on as in T1, which step 3's ACT never did (0/100). A possible reason is how the command enters: ACT gives the one-hot vector its own encoder token, DP appends its 11 numbers to the image and state features in the U-Net's conditioning. Three rollouts are a lead, not a finding.
 
 ## Findings and bugs
 
@@ -102,3 +127,7 @@ The task input works already: every S1 success stops and every T1 rollout contin
 **7. Encoder crash during recording.** A rare SVT-AV1 crash stopped the first step-2 recording; the recorder now retries a failed part ([2data_collection.md](2data_collection.md), "Encoder crash").
 
 **8. Diffusion Policy (step 3b) setup.** LeRobot 0.6.1's DP with its defaults (2 observation frames, horizon 64 and 32 actions executed, about 1.3 s and 0.6 s at 50 fps; ResNet-18 per camera at the full 240 × 320; DDPM with 100 denoising steps), the one-hot input as `observation.environment_state` (added to DP's global conditioning), batch 64 (LeRobot's earlier PushT config and the DP paper's image experiments) and 100k steps (as ACT; ~25 passes over `data/min`). These are our choices, not a published recipe for this setup. DP normalises state and action by their min-max range, not their std, so the normalisation floor now also widens any range below 2 × `STD_FLOOR` (`floor_std`; `data/min` needs none, every joint moves by ≥ 0.86 rad somewhere, but `data/s1a` would). Checked end to end on the Mac (2 training steps, one rollout through `sim/evaluate.py`). Evaluation cost: one S1 rollout took ~146 s on the Mac (100 denoising steps every 32 frames, sharing the GPU with another evaluation), so 300 rollouts would take most of a day.
+
+**9. S1's success rate is set by the slide limit, so step 5 changed (2026-11-02).** Every S1 rollout so far (steps 1 and 3, held-out colours, SmolVLA's first check) opens the drawer and the arms hold still; every failure is the cube sliding past the 5 mm limit, mostly 5.1–5.5 mm. The limit sits just above the expert's largest slide (4.0 mm, median 2.2) and the policies pull about twice as hard, so differences such as 60% vs 84% are mostly where 4–6 mm slides fall against the threshold, not differences in skill. One comparison stays real: S1:A went from 44/50 (step 1) to 30/50 (step 3), a rougher pull. Consequences: no longer ACT run (it would target the threshold, not the task); residual RL, planned as step 5 to fix "precision failures", would mostly learn to beat the same threshold and is parked as optional step 6; step 5 is now stress tests (1tasks_scene.md). Still to do: report S1 as the task rate (opened and held still) with the slide in mm and success at 5/6/8 mm.
+
+**10. Early checks before full evaluations.** `python -m sim.offline_check CKPT DATASET` checks a checkpoint's normalisation stats against the floor and replays recorded training episodes through the policy (its own chunking and history, the recorded observations), in a minute on the CPU. Step 3's ACT: 0.005–0.007 rad mean error per joint. SmolVLA (step 4, 20k): 0.006–0.008 rad, no flags; 5 S1:A rollouts: 4 succeed and stop, the fifth slides the cube 5.5 mm (seed 100000, which ACT fails too); ~60 s per rollout sharing the Mac's GPU (`outputs/min_smolvla/eval_quick`). The DP smoke test on the 4090 caught a missing dependency (`diffusers`; `cloud/train.sh` now installs `lerobot[diffusion]`) before any training time was spent; `scripts/check_dp.sh` runs the same checks on DP's 5k checkpoint.

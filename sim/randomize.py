@@ -128,6 +128,7 @@ class Randomization:
     demo_noise: float = DEMO_NOISE  # rad, σ of the demonstration noise
     colours: bool = True
     distractors: int = 2  # at most this many (0 = none)
+    distractors_min: int = 0  # at least this many (the stress test places all of them)
     cube_yaw: float = 45.0  # degrees, ± range on the table
     cube_yaw_drawer: float = 20.0  # degrees, ± range in the drawer
     lighting: bool = True
@@ -171,7 +172,7 @@ def apply(sim: Sim, seed: int, cfg: Randomization) -> dict:
         info["cube_yaw"] = round(float(u * cfg.cube_yaw), 1)
         info["cube_yaw_drawer"] = round(float(u * cfg.cube_yaw_drawer), 1)
     if cfg.distractors:
-        n = int(rng.integers(0, cfg.distractors + 1))
+        n = int(rng.integers(cfg.distractors_min, cfg.distractors + 1))
         bodies = rng.choice(DISTRACTORS, n, replace=False)
         zones = rng.choice(len(DISTRACTOR_ZONES), n, replace=False)
         # Distractor colours come from the full palette but never match the cube's, so the

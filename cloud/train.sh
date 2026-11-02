@@ -18,7 +18,7 @@ shift 3
 command -v uv >/dev/null || { curl -LsSf https://astral.sh/uv/install.sh | sh; export PATH="$HOME/.local/bin:$PATH"; }
 [ -d .venv-train ] || uv venv -q -p 3.12 .venv-train
 source .venv-train/bin/activate
-uv pip install -q "lerobot[smolvla,training,dataset]==0.6.1"
+uv pip install -q "lerobot[smolvla,diffusion,training,dataset]==0.6.1"
 common=(--dataset.repo_id=local/bimanual_so101 --dataset.root="$root" --policy.device=cuda --policy.push_to_hub=false
         --output_dir="$out" --job_name="$(basename "$out")" --wandb.enable=false --num_workers=8 --save_freq=5000)
 case $policy in

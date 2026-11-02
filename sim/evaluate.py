@@ -22,6 +22,11 @@ Conditions (one held-out factor each, as LIBERO-PRO / LIBERO-Plus report each pe
     train          train colours, train phrasings (the headline number)
     eval_colours   held-out colours
     eval_wording   held-out phrasings (language-conditioned policies only)
+Stress tests (minimal plan step 5): one training factor pushed past its training range, the rest as train, as
+The COLOSSEUM (Pumacay et al. 2024) perturbs one factor at a time:
+    stress_distractors   all three distractors every time (training: 0-2)
+    stress_start_pose    arm start-pose noise 3x (σ 0.06 rad per joint; training: 0.02)
+    stress_cube_yaw      the cube turned up to ±40° in the drawer (training: ±20°)
 
 Writes `<out>/<condition>/episodes.jsonl` (one line per rollout: variant, seed, success, checks,
 stopped or continued) and `summary.json`, plus overview videos of the first --videos rollouts per variant.
@@ -57,7 +62,10 @@ FIRST_STEP_DONE = {"T1": lambda sim: sim.drawer_opening() > T.DRAWER_OPEN - 0.01
                    "T2": E.cube_upright_in_drawer}
 CONDITIONS = {"train": RZ.Randomization(),
               "eval_colours": RZ.Randomization(colours_split="eval"),
-              "eval_wording": RZ.Randomization(wording_split="eval")}
+              "eval_wording": RZ.Randomization(wording_split="eval"),
+              "stress_distractors": RZ.Randomization(distractors=len(RZ.DISTRACTORS), distractors_min=len(RZ.DISTRACTORS)),
+              "stress_start_pose": RZ.Randomization(start_noise=3 * RZ.START_NOISE),
+              "stress_cube_yaw": RZ.Randomization(cube_yaw_drawer=40.0)}
 
 
 def load_policy(path: Path, device: str, temporal_ensemble: float | None = None):
