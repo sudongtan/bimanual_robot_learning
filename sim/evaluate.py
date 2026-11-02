@@ -140,6 +140,7 @@ def rollout(policy, pre, post, variant, seed: int, rand: RZ.Randomization, video
               "nearest_target": min(T.CUBE_TARGETS, key=lambda t: np.linalg.norm(sim.body_pos("cube")[:2] - T.CUBE_TARGETS[t]))}
     if variant[0] in STOP_TASKS:
         result["stopped"] = bool(ok and still)
+        result["held_still"] = bool(still)  # the last 2 s alone, whether or not the task succeeded
     if variant[0] in FIRST_STEP_DONE:
         result["continued"] = bool(first_done and second_left > E.IDLE_MOVE)
     return result, frames
@@ -191,10 +192,11 @@ def main():
                  "cube_slide_mm_median": float(np.median([r["cube_slide_mm"] for r in results]))}
             if variant[0] in STOP_TASKS:
                 s["stop"] = float(np.mean([r["stopped"] for r in results]))
+                s["held_still"] = float(np.mean([r["held_still"] for r in results]))
             if variant[0] in FIRST_STEP_DONE:
                 s["continue"] = float(np.mean([r["continued"] for r in results]))
             summary["variants"][name] = s
-            print(f"{name}: success {s['success']:.0%}" + "".join(f", {k} {s[k]:.0%}" for k in ("stop", "continue") if k in s),
+            print(f"{name}: success {s['success']:.0%}" + "".join(f", {k} {s[k]:.0%}" for k in ("stop", "held_still", "continue") if k in s),
                   flush=True)
     (out / "summary.json").write_text(json.dumps(summary, indent=1))
     print(f"written: {out}")

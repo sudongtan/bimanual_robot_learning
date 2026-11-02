@@ -30,6 +30,7 @@ def test_record_and_read_back(tmp_path):
     from sim.dataset_view import STD_FLOOR
     for k in ("observation.state", "action", "action_nominal"):
         assert ds.meta.stats[k]["std"].min() >= STD_FLOOR - 1e-6
+        assert (ds.meta.stats[k]["max"] - ds.meta.stats[k]["min"]).min() >= 2 * STD_FLOOR - 1e-6
     for e in good:
         ep = ds.meta.episodes[e["episode_index"]]
         assert ep["length"] == e["frames"]

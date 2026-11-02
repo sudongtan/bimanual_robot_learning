@@ -23,7 +23,8 @@ Six tasks, each doable by either arm from the same start scenes (20 command vari
 - **Scope now: the minimal plan.** One scene (drawer closed, cube inside) shared by S1 and T1: 6 command variants, 300 demonstrations, enough to show every point up to a VLA. S2–S4 and T2 are on hold ([1tasks_scene.md](1tasks_scene.md)).
 - **Step 1 done:** ACT on "open the drawer with arm A" (50 demonstrations) succeeds and stops in **88% (44/50)** of held-out starts, with ACT's temporal ensembling. All failures are the cube sliding just past the 5 mm limit in the drawer. Training on the noise-free expert commands made no real difference (82%), so the commands as sent are kept. Two findings along the way: a normalisation bug on joints that never move, and temporal ensembling taking the policy from 4/10 to 10/10 ([3train_evaluation.md](3train_evaluation.md)).
 - **Steps 2–3 done:** one ACT with a one-hot command input, trained on all six variants (300 demonstrations) of the one scene. **The command decides the task and the target:** from the same start, no S1 rollout went on to take the cube out, all 200 T1 rollouts continued to the hand-over, and none put the cube on the wrong side. T1 succeeds in 97.5% (195/200); S1 in 72% (72/100), every failure the cube sliding 5.0–6.3 mm against the 5 mm limit ([3train_evaluation.md](3train_evaluation.md)).
-- **Next (step 4):** SmolVLA fine-tuned on the same data with the text commands, on a rented GPU (~8 days on this Mac, a few hours on an A100 or 4090).
+- **Held-out cube colours:** step 1's policy keeps its 88% with colours it never saw; step 3's is being evaluated.
+- **Now (steps 4 and 3b):** SmolVLA fine-tuned on the same data with the text commands, then Diffusion Policy with the one-hot input, on a rented RTX 4090 (SmolVLA ~5 h there, ~8 days on this Mac). Live state: [STATUS.md](STATUS.md).
 
 ## Quick start
 
@@ -44,6 +45,7 @@ Training uses LeRobot 0.6.1 (`lerobot-train`); the runs behind the results are i
 
 | File | Contents |
 |---|---|
+| [STATUS.md](STATUS.md) | What is running now, what's next, open questions |
 | [0background.md](0background.md) | Motivation, related work, the research question, what is evaluated, scope |
 | [1tasks_scene.md](1tasks_scene.md) | Tasks, scene, randomisation, the scripted expert, success checks, files, and the step-by-step plan |
 | [2data_collection.md](2data_collection.md) | Recording design, data checks, cube colours |

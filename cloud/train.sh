@@ -29,5 +29,9 @@ case $policy in
   smolvla) lerobot-train --policy.path=lerobot/smolvla_base --steps=20000 --batch_size=64 \
              --rename_map='{"observation.images.overview": "observation.images.camera1", "observation.images.left_wrist": "observation.images.camera2", "observation.images.right_wrist": "observation.images.camera3"}' \
              "${common[@]}" "$@" ;;
-  *) echo "policy: act or smolvla" >&2; exit 1 ;;
+  # Diffusion Policy: LeRobot 0.6.1's defaults (2 observation frames, horizon 64, 32 actions executed, ResNet-18 per camera,
+  # DDPM 100 steps), batch 64 (LeRobot's earlier DP config for PushT, and the DP paper's image experiments), 100k steps as
+  # ACT. Needs the one-hot view (data/min_onehot) for the variant input.
+  dp) lerobot-train --policy.type=diffusion --steps=100000 --batch_size=64 "${common[@]}" "$@" ;;
+  *) echo "policy: act, smolvla or dp" >&2; exit 1 ;;
 esac

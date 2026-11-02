@@ -40,16 +40,24 @@ QUANTILES = (0.01, 0.10, 0.50, 0.90, 0.99)
 # The smallest real spread is 0.017 (start noise), so 0.01 changes nothing that varies. Diffusion Policy's
 # normaliser likewise treats near-constant dimensions as constant instead of dividing by their range.
 STD_FLOOR = 0.01
+# rad; the same for min-max normalisation (LeRobot's Diffusion Policy normalises state and action by their range,
+# not their std): a range below it is widened around its middle.
+RANGE_FLOOR = 2 * STD_FLOOR
 FLOORED = ("observation.state", A, B)
 
 
 def floor_std(root: Path, floor: float = STD_FLOOR):
-    """Raise the std of the joint features in `root`'s meta/stats.json (what LeRobot normalises with) to `floor`."""
+    """Raise the std of the joint features in `root`'s meta/stats.json (what LeRobot normalises with) to `floor`,
+    and widen their min-max range to 2 * `floor`."""
     path = root / "meta" / "stats.json"
     stats = json.loads(path.read_text())
     for k in FLOORED:
         if k in stats:
-            stats[k]["std"] = np.maximum(stats[k]["std"], floor).tolist()
+            s = stats[k]
+            s["std"] = np.maximum(s["std"], floor).tolist()
+            lo, hi = np.array(s["min"]), np.array(s["max"])
+            half = np.maximum(hi - lo, 2 * floor) / 2
+            s["min"], s["max"] = ((lo + hi) / 2 - half).tolist(), ((lo + hi) / 2 + half).tolist()
     path.write_text(json.dumps(stats, indent=4))
 
 

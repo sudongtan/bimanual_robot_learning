@@ -9,7 +9,7 @@ Goal: collect scripted bimanual demos in sim of four primitive skills and two co
 The workcell, a scripted expert for all six tasks, the per-episode randomisation, the recorder and the success checks (which score a policy the same way as the expert, `sim/episode.py`) are built and validated. The step-0 batch is recorded and checked ([2data_collection.md](2data_collection.md)). Working to the **minimal plan** (below); results in [3train_evaluation.md](3train_evaluation.md):
 - **Step 1 done:** ACT on S1 arm A, 88% (44/50) on eval starts, all successes stopped, with temporal ensembling. Training on `action_nominal` gave 82%, no real difference, so `action` is kept.
 - **Steps 2–3 done:** `data/min` (300 episodes); one ACT with the one-hot variant input: S1 72/100, T1 195/200, stop and continue follow the command every time (no S1 rollout took the cube out, every T1 rollout continued, no cube on the wrong side). All S1 failures are the 5 mm slide limit.
-- **Next: step 4,** SmolVLA on a rented GPU ([cloud/README.md](cloud/README.md); on this Mac it would take ~8 days).
+- **Now: step 4 and 3b** on a rented RTX 4090 ([cloud/README.md](cloud/README.md)): SmolVLA training (~5 h), then Diffusion Policy with the one-hot input (step 3b). Both are evaluated on the Mac.
 
 Validation, `python -m sim.validate 40` (40 random starts per arm and per target, all randomisation on, expert at 50 Hz as recorded):
 
@@ -205,11 +205,12 @@ The full plan below records all 20 variants before reaching the VLA. This versio
 | 1 | S1 arm A: 50 | ACT on S1 arm A, on `action` and on `action_nominal` | As step 1 of the full plan: ≥ 80% on the train condition; keep the better action label. **Done:** 88%; `action` kept |
 | 2 | S1 arm B: 50; T1 opener A/B × left/right: 200 (recorded as one dataset with S1 arm A, `data/min`) | — | The first-batch checks (`sim.check_data`). **Done:** 300/300, 11 low-contrast flags (red cubes, dim light) |
 | 3 | — | ACT with the variant input (one-hot, as Meta-World MT10/MT50), all 6 variants | Success per variant, swap test, stop rate (S1) and continue rate (T1). **Done:** S1 72%, T1 97.5%; stop/continue and target follow the command |
-| 4 | — | SmolVLA fine-tuned on the same 300 episodes, with the commands | Same, under the train, eval-colours and eval-phrasing conditions. The gap to step 3 on the train condition is the cost of reading language |
+| 3b | — | Diffusion Policy with the same variant input, all 6 variants (added 2026-11-02) | As step 3: a second imitation-learning baseline on the same scene and input, so step 3's results aren't specific to ACT |
+| 4 | — | SmolVLA fine-tuned on the same 300 episodes, with the commands | Same, under the train, eval-colours and eval-phrasing conditions. The gap to step 3 (and 3b) on the train condition is the cost of reading language |
 
 **Imbalance:** T1 has two thirds of the scene's episodes, so a policy that always continues may be rewarded (though by frames at the decision point, S1's 2 s hold may outweigh it). Recorded 50 per command and trained step 3 without reweighting: no lean (no S1 rollout continued, every T1 rollout did), so none is needed; research and decision in [3train_evaluation.md](3train_evaluation.md), finding 5.
 
-**On hold:** S2, S3, S4 and T2 (their scenes and data); the middle target; the chained-primitive and zero-shot composition tests (steps 13–14, which need the S4 command; the natural next addition is S4 plus S2 from the fully-open scene, so that scene is shared too); Diffusion Policy, π0 and the per-variant T1 baseline. What the minimal version gives up: the hand-over is shown inside one command (T1), not as two primitive commands chained.
+**On hold:** S2, S3, S4 and T2 (their scenes and data); the middle target; the chained-primitive and zero-shot composition tests (steps 13–14, which need the S4 command; the natural next addition is S4 plus S2 from the fully-open scene, so that scene is shared too); π0 and the per-variant T1 baseline (Diffusion Policy moved into the minimal plan as step 3b). What the minimal version gives up: the hand-over is shown inside one command (T1), not as two primitive commands chained.
 
 **Code for the minimal plan (written and checked end to end):**
 - Variant input: `RZ.variant_vector` (11 dims, `VARIANT_DIMS`), added to a dataset by `python -m sim.dataset_view SRC DST --variant-input` as `observation.environment_state`, which LeRobot's ACT takes as an extra encoder input, unnormalised. `sim/evaluate.py` supplies it when the policy has it. Checked: ACT trains on it, and a rollout gets the vector.
