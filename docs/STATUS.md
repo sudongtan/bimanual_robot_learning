@@ -1,6 +1,6 @@
 # Status and handoff
 
-_Last updated: 2026-11-03 10:10 CET. Update this file whenever a job starts or ends._
+_Last updated: 2026-11-03 15:45 CET. Update this file whenever a job starts or ends._
 
 Where the project stands, what is running right now, and what comes next. The design is in the numbered docs (../README.md, "Documents"); this file is only the live state.
 
@@ -14,13 +14,14 @@ Where the project stands, what is running right now, and what comes next. The de
 | 4 (trained) | SmolVLA, 20k steps on the 4090 (final loss 0.007). First check: 4/5 S1:A rollouts succeed (the failure is the slide), offline replay error 0.006–0.008 rad (ACT: 0.005–0.007) | `outputs/min_smolvla/eval_quick` |
 | 4 (evaluated) | SmolVLA, 6 variants × 50 under train / held-out colours / held-out wording: S1 76 / 71 / 49 of 100, T1 111 / 122 / 0 of 200 (ACT: S1 72, T1 195 on train). T1 misses are placement (it continues 198/200); unseen wording breaks it (3train_evaluation.md, step 4) | `outputs/min_smolvla/eval` |
 | 3b (trained) | DP, 100k steps on the 4090 (resumed from 50k after the disk filled). 100k check: offline replay 0.002–0.003 rad, no flags; S1:A 4/5 (the other arm still 5/5), T1:A:left 5/5. 10 DDIM steps replay as well as the 100 DDPM steps | `outputs/min_dp/eval_100000` |
+| 5 (ACT, SmolVLA) | Stress tests, S1:A and T1:A:left × 20: distractors no effect; turned cube costs SmolVLA's T1 (9 against 12 on the same starts), not ACT; the start-pose S1 drop is the idle-arm check (finding 11); SmolVLA: more phrasings S1 10/20, T1 0/20, empty command 0/20 (arm B moves) | 3train_evaluation.md, step 5 |
 
 ## Running now
 
 | Job | Where | Started | Expected end | Check with |
 |---|---|---|---|---|
-| Step 5 stress tests: ACT (step 3) and SmolVLA under `stress_distractors`, `stress_start_pose`, `stress_cube_yaw`, S1:A and T1:A:left × 20 each; then SmolVLA under `stress_wording` (same) and `stress_blank_command` (S1:A × 20) | This Mac, detached (`scripts/stress.sh`) | 2026-11-03 09:37 CET | ~2026-11-03 15:30–16:00 CET (ACT ~46 s per S1, ~83 s per T1 rollout) | `cat outputs/stress.out` |
-| DP evaluation (`scripts/eval_dp.sh`, 10 DDIM steps): train and eval_colours 6 × 50, stress S1:A and T1:A:left × 20, then 10 + 10 with the 100 DDPM steps as a check | Mac GPU, nohup; waits for the stress tests | queued since 2026-11-03 09:30 CET | ~13 h after it starts, ~2026-11-04 05:00 CET (estimate, until the first DDIM rollouts are timed) | `cat outputs/eval_dp.out` |
+| DP evaluation (`scripts/eval_dp.sh`, 10 DDIM steps): train and eval_colours 6 × 50, stress S1:A and T1:A:left × 20, then 10 + 10 with the 100 DDPM steps as a check | Mac GPU, nohup | 2026-11-03 14:32 CET | ~2026-11-04 04:00–04:30 CET (~39 s per S1 rollout with DDIM) | `cat outputs/eval_dp.out` |
+| Start-pose rerun (finding 11): ACT and SmolVLA under `stress_start_pose`, S1:A and T1:A:left × 20, now logging the idle arm's distance outside its start–home range (`idle_arm_rad.away`) | Mac GPU, nohup (`scripts/rerun_start_pose.sh`), waits for DP | queued 2026-11-03 15:40 CET | ~1.5 h after DP, ~2026-11-04 06:00 CET | `cat outputs/rerun_start_pose.out` |
 
 **The rented machine:** reached as `ssh gpu` (alias in this Mac's `~/.ssh/config`: 195.224.35.250, port 20412, user root). Vast's login opens its own tmux, so watch a session with `ssh -t gpu "tmux attach -t train"` (leave with `Ctrl-b d`, never `Ctrl-c`). Files are in `/root/bimanual`. It bills about $0.33/h until it is **deleted** in the Vast dashboard (the user deletes it). Idle since DP ended (2026-11-03 02:52 CET); everything needed is copied to this Mac.
 
@@ -34,5 +35,5 @@ Where the project stands, what is running right now, and what comes next. The de
 ## Open questions for the user
 
 - Decided 2026-11-02: no longer ACT run. S1's failures are all slides just past the 5 mm limit (every rollout opens the drawer), so more training targets the threshold, not the task. Extra training seeds (error bars) remain an option.
-- Report S1 more honestly: the task rate (drawer opened, arms held still) with the slide in mm and success at 5/6/8 mm, from the logged rollouts. Not done yet.
+- S1 reported apart from the 5 mm limit (finding 9, `python -m sim.s1_report`): done 2026-11-03; add DP when its evaluation ends.
 - `pyproject.toml` lists a `policies/lerobot_policy_bc_mlp` plugin that doesn't exist (why `uv run` fails). Left as is.

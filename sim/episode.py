@@ -110,6 +110,10 @@ class Monitor:
         self.cube = m.body("cube").id
         self.q0 = {a: sim.q(a) for a in ARMS}
         self.moved = {a: 0.0 for a in ARMS}  # rad, largest joint distance from the start, per arm
+        # rad, largest joint distance outside the range between the start and the usual pose, per arm: an arm that only
+        # moves back towards its usual pose stays near 0 (finding 11, 3train_evaluation.md); logged, not a check
+        self.away = {a: 0.0 for a in ARMS}
+        self.home = sim.home
         self.touched = {a: set() for a in ARMS}  # items in ITEM_BODIES each arm has touched
         self.release_z = None  # cube height at the last step an arm touched it
         self.drop = 0.0  # m, the cube's longest fall since an arm last touched it
@@ -125,7 +129,10 @@ class Monitor:
                 self.touched[ARMS[ai]].add(ITEM_BODIES[ii])
                 cube_touched |= ITEM_BODIES[ii] == "cube"
         for a in ARMS:
-            self.moved[a] = max(self.moved[a], float(np.abs(d.qpos[sim.arms[a].qadr] - self.q0[a]).max()))
+            q = d.qpos[sim.arms[a].qadr]
+            self.moved[a] = max(self.moved[a], float(np.abs(q - self.q0[a]).max()))
+            lo, hi = np.minimum(self.q0[a], self.home), np.maximum(self.q0[a], self.home)
+            self.away[a] = max(self.away[a], float(np.maximum(lo - q, q - hi).max()))
         z = float(d.xpos[self.cube, 2])
         if cube_touched:
             self.release_z = z

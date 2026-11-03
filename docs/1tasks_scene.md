@@ -11,7 +11,8 @@ The workcell, a scripted expert for all six tasks, the per-episode randomisation
 - **Steps 2–3 done:** `data/min` (300 episodes); one ACT with the one-hot variant input: S1 72/100, T1 195/200, stop and continue follow the command every time (no S1 rollout took the cube out, every T1 rollout continued, no cube on the wrong side). All S1 failures are the 5 mm slide limit. Held-out colours: S1 77/100, T1 194/200, no gap.
 - **Step 4 trained** on a rented RTX 4090 ([4cloud_training.md](4cloud_training.md)), 20k steps; a first check succeeds on 4/5 S1:A rollouts (the failure is the slide). Full evaluation queued on the Mac.
 - **Step 4 evaluated** (3train_evaluation.md): SmolVLA is level with ACT on S1, T1 56% against 98% (loose placement; it continues 198/200), no colour gap; under the held-out sentence shape T1 fails 200/200.
-- **Now:** step 5 (stress tests, which replaced residual RL) running on the Mac for ACT and SmolVLA; then step 3b's evaluation (Diffusion Policy, trained 100k steps on the 4090; 10 DDIM steps, `scripts/eval_dp.sh`).
+- **Step 5 done for ACT and SmolVLA** (3train_evaluation.md): distractors don't matter; the turned cube costs SmolVLA's T1, not ACT's; SmolVLA follows phrasings close to its training ones and fails on other structures and an empty command.
+- **Now:** step 3b's evaluation and stress tests (Diffusion Policy, 10 DDIM steps, `scripts/eval_dp.sh`), ends ~2026-11-04 04:30.
 
 Validation, `python -m sim.validate 40` (40 random starts per arm and per target, all randomisation on, expert at 50 Hz as recorded):
 

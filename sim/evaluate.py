@@ -152,6 +152,10 @@ class Tracker:
         if variant[0] in STOP_TASKS:
             result["stopped"] = bool(ok and still)
             result["held_still"] = bool(still)  # the last 2 s alone, whether or not the task succeeded
+            # rad, the arm that should stay idle: from its start (other_arm_stayed_home fails above E.IDLE_MOVE) and
+            # outside the range between its start and its usual pose, which doesn't count moving back home (finding 11)
+            idle = ARM_NAME[E.other(variant[1])]
+            result["idle_arm_rad"] = {"from_start": round(sim.monitor.moved[idle], 4), "away": round(sim.monitor.away[idle], 4)}
         if variant[0] in FIRST_STEP_DONE:
             result["continued"] = bool(self.first_done and self.second_left > E.IDLE_MOVE)
         return result

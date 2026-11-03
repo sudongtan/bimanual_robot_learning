@@ -37,6 +37,18 @@ def test_doing_nothing_fails(variant):
     assert checks["no_arm_contact"] and checks["distractors_still"]
 
 
+def test_idle_arm_moving_home_is_not_away():
+    """Finding 11: an idle arm that starts off its usual pose and moves back to it has moved from its start
+    (other_arm_stayed_home fails) but not outside the range between start and home (Monitor.away stays low)."""
+    rand = Randomization(start_noise=0.06)
+    sim, start = E.reset(("S1", "A", None), 3, rand)  # the right arm's wrist starts 0.2 rad off its usual pose
+    sim.data.ctrl[sim.arms["right"].act] = sim.home
+    sim.step(1000)
+    assert sim.monitor.moved["right"] > E.IDLE_MOVE
+    assert sim.monitor.away["right"] < E.IDLE_MOVE / 2  # the overshoot past home
+    assert not E.success(sim, start)[1]["other_arm_stayed_home"]
+
+
 @pytest.mark.slow
 def test_wrong_arm_fails():
     """S1 told arm A, done by arm B: the drawer is open, but the check fails on who did it."""
@@ -45,6 +57,7 @@ def test_wrong_arm_fails():
     ok, checks = E.success(sim, start)
     assert checks["drawer_open"] and not ok
     assert not checks["named_arm_acted"] and not checks["other_arm_stayed_home"]
+    assert sim.monitor.away["right"] > E.IDLE_MOVE  # acting with the wrong arm is away from home too
 
 
 @pytest.mark.slow
