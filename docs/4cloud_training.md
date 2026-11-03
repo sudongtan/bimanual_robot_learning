@@ -39,7 +39,7 @@ cat ~/.ssh/id_ed25519.pub
 | | Choose | Why |
 |---|---|---|
 | GPU | 1 × RTX 4090 (24 GB) or 1 × A100 (40/80 GB) | 24 GB may need a smaller batch (step 8) |
-| Disk | ≥ 50 GB | Dataset 2.5 GB, Python environment ~10 GB, checkpoints |
+| Disk | ≥ 80 GB | Dataset 2.5 GB, Python environment ~10 GB, checkpoints: every 5k steps LeRobot saves the model and the optimizer state (DP: 1.1 + 2.2 GB), so 20 DP checkpoints need ~66 GB. On 2026-11-02 a 50 GB disk filled at DP's 55k save; `cloud/dp_resume.sh` resumes and keeps optimizer state for the latest checkpoint only |
 | CPU | ≥ 8 cores | Decoding three video streams per sample |
 | Image / template | Any recent PyTorch or CUDA Ubuntu image | `train.sh` installs its own Python 3.12, which LeRobot 0.6.1 needs |
 

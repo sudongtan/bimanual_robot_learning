@@ -15,7 +15,8 @@ can be added and validated one at a time. Where each is drawn:
     cube_yaw     cube rotation about z: ±45° on the table (the cube repeats every 90°, so this is
                  every orientation), ±20° in the drawer (arm B found no grasp from +25°)
     lighting     direction, intensity and tint of the main light; headlight level
-    wording      command paraphrases (one held-out phrasing per task for the eval split)
+    wording      command paraphrases (one held-out phrasing per task for the eval split); the stress tests
+                 add STRESS_COMMANDS (more held-out phrasings, S1 and T1) and an empty command
 """
 
 from __future__ import annotations
@@ -220,12 +221,42 @@ def distractors_moved(sim: Sim) -> float:
     return max((float(np.linalg.norm(sim.body_pos(b)[:2] - xy)) for b, xy in sim.distractor_xy.items()), default=0.0)
 
 
+# Held-out phrasings for the stress test (minimal plan step 5, `wording_split="stress"`): synonyms, other
+# structures, terse and polite forms, none in COMMANDS. A separate list, so COMMANDS (and every recorded
+# episode's command) stays as it is. As CALVIN and LIBERO-Plus evaluate on unseen instructions.
+STRESS_COMMANDS = {
+    "S1": ("pull out the drawer using arm {arm}",
+           "slide the drawer open with arm {arm}",
+           "arm {arm} should open the drawer",
+           "with arm {arm}, open the drawer",
+           "arm {arm}: open drawer",
+           "please open the drawer with arm {arm}",
+           "get arm {arm} to pull the drawer open",
+           "can you open the drawer using arm {arm}?"),
+    "T1": ("first open the drawer with arm {opener}; then arm {picker} takes the cube out and puts it on the {target} of the table",
+           "arm {opener}: open drawer. arm {picker}: cube to the {target} of the table",
+           "pull the drawer open using arm {opener}, and have arm {picker} place the cube on the {target} side of the table",
+           "with arm {opener}, open the drawer, then with arm {picker}, move the cube onto the {target} of the table",
+           "please open the drawer with arm {opener} and then put the cube on the table's {target} with arm {picker}",
+           "arm {opener} slides the drawer open, after which arm {picker} lifts the cube out and sets it on the {target} of the table",
+           "open the drawer (arm {opener}) and take out the cube, placing it on the {target} of the table (arm {picker})",
+           "get arm {opener} to open the drawer and arm {picker} to put the cube on the {target} of the table"),
+}
+
 def command(task: str, seed: int, cfg: Randomization, **names) -> str:
-    """The episode's command string. `names`: arm / target / opener / picker / placer / closer."""
+    """The episode's command string. `names`: arm / target / opener / picker / placer / closer.
+    Wording splits: "train" (all but the last phrasing), "eval" (the last), "stress" (STRESS_COMMANDS, one per
+    seed) and "blank" (an empty command: does the policy read it, or act on the scene alone?)."""
     options = COMMANDS[task]
+    split = cfg.split_of("wording")
+    if split == "blank":
+        return ""
+    if split == "stress":
+        stress = STRESS_COMMANDS[task]
+        return stress[int(np.random.default_rng([seed, 3]).integers(len(stress)))].format(**names)
     if not cfg.wording:
         template = options[0]
-    elif cfg.split_of("wording") == "train":
+    elif split == "train":
         template = options[int(np.random.default_rng([seed, 2]).integers(len(options) - 1))]
     else:
         template = options[-1]

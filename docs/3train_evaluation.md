@@ -82,16 +82,38 @@ The task input works already: every S1 success stops and every T1 rollout contin
 **No colour gap.** Held-out T1 194/200 against 195/200; every T1 rollout continued and none ended on the wrong side; S1 held still 100/100 and failed only by the slide. T1 is the part that tests colour, since the second arm has to find and grasp the cube; S1 needs only the handle. As in step 1 (88% both ways), unseen cube colours don't hurt ACT here.
 
 
-### Minimal plan step 3b: Diffusion Policy with the one-hot input (training, interim checks)
+### Minimal plan step 4: SmolVLA with the text commands (300 episodes)
 
-Training on the rented 4090 (`outputs/min_dp`, 100k steps at batch 64, 0.33 s per step, ends ~2026-11-03 00:55). Early checks with `scripts/check_dp.sh` (finding 10): offline replay of 6 training episodes and 3 rollouts each of S1:A and T1:A:left, on the CPU (~2.5 min per S1 rollout, ~4.5 min per T1).
+`lerobot/smolvla_base` fine-tuned with LeRobot's recipe on `data/min` (20k steps at batch 64 on a rented RTX 4090, ~5 h; vision encoder and language model frozen, only the action expert trained: `train_expert_only`, LeRobot's default). Evaluated as it runs by default: 50-action chunks executed open loop, 10 flow-matching steps (`scripts/eval_smolvla.sh`, `outputs/min_smolvla/eval`, 50 rollouts per variant, ~60 s per rollout on the Mac's GPU). T1 misses: distance from the cube to the commanded spot, and whether it ended nearest that spot.
+
+| Variant | Train | Held-out colours | Held-out wording | Step 3 ACT (train) |
+|---|---|---|---|---|
+| S1:A | 40/50, stop 39 (cube_kept_place 9, 5.1-8.7 mm; other arm moved 1) | 34/50 (cube_kept_place 11; other arm moved 5; drawer 1) | **8/50** (drawer_open 28, other arm moved 16, cube_kept_place 12) | 30/50 |
+| S1:B | 36/50, stop 36 (cube_kept_place 14, 5.1-8.7 mm) | 37/50 (cube_kept_place 13) | 41/50, stop 33 (cube_kept_place 8; other arm 1) | 42/50 |
+| T1:A:left | 30/50, continue 49 (miss median 2.8 cm, 19/20 nearest the right spot) | 31/50, continue 50 (2.5 cm, 14/19) | **0/50**, continue 0 (second arm never acted; opener idle 19) | 49/50 |
+| T1:A:right | 27/50, continue 49 (3.5 cm, 14/23) | 27/50, continue 49 (4.9 cm, 11/23) | **0/50**, continue 0 (opener idle 16) | 49/50 |
+| T1:B:left | 32/50, continue 50 (6.7 cm, 8/18) | 28/50, continue 50 (12.4 cm, 8/22) | **0/50**, continue 0 (neither arm acted, 50/50) | 47/50 |
+| T1:B:right | 22/50, continue 50 (4.2 cm, 22/28) | 36/50, continue 50 (3.7 cm, 13/14) | **0/50**, continue 0 (neither arm acted, 50/50) | 50/50 |
+
+**Train: level with ACT on S1, well below it on T1.** S1 76/100 against ACT's 72/100, failing as ACT does, by the slide (finding 9). T1 111/200 (56%) against 195/200: SmolVLA hands over to the second arm (198/200), so it reads the task, but the placement is loose, every failure is cube_at_target. With arm A placing (T1:B) misses are larger and often not at the commanded spot (T1:B:left: median 6.7 cm, 8/18 nearest it); with arm B placing (T1:A) they are mostly near misses (T1:A:left: median 2.8 cm, 19/20 on the commanded spot). Not separated yet: the policy itself against the way it is run (50 actions open loop, ~1.7 s, where ACT re-plans every frame; finding 2 showed how much that matters for ACT).
+
+**Held-out colours: no gap** (S1 71/100, T1 122/200 against 76 and 111), as for ACT.
+
+**Held-out wording: the policy loses the task.** The held-out phrasing is a new sentence shape for each task ("arm A, pull the drawer open"; "arm A opens the drawer and arm B moves the cube to the left of the table", without the "then" and "take the cube out" both training phrasings have). Under it T1 fails 200/200: in T1:A arm A reaches into the drawer area but the second arm never moves; in T1:B neither arm does its step (arm A drifts, arm B stays home). S1:A drops to 8/50 (drawer not opened 28, the other arm moves 16); S1:B is unaffected (41/50). With only two training phrasings per task and the language model frozen, the action expert learned the language model's output for those two sentences; a third shape is out of distribution. This matches LIBERO-PRO and LIBERO-Plus (2025), where fine-tuned VLAs fail or ignore the instruction under rewording. ACT and DP are not exposed to this (they get the variant as a fixed vector), which is the trade the one-hot input makes. Step 5's `stress_wording` (eight more phrasings) and `stress_blank_command` show whether any rewording breaks it or only some shapes.
+
+### Minimal plan step 3b: Diffusion Policy with the one-hot input (training, checks at 5k, 20k, 100k)
+
+Training on the rented 4090 (`outputs/min_dp`, 100k steps at batch 64, 0.33 s per step; ended 2026-11-03 02:52 CET. The 50 GB disk filled at the 55k save (3.3 GB per checkpoint with the optimizer state); training resumed from the 50k checkpoint with LeRobot's `--resume`, which restores the optimizer, scheduler, RNG and data order, so steps 50k-55k were repeated, not skipped; `cloud/dp_resume.sh`). Early checks with `scripts/check_dp.sh` (finding 10): offline replay of 6 training episodes and 3 rollouts each of S1:A and T1:A:left, on the CPU (~2.5 min per S1 rollout, ~4.5 min per T1).
 
 | Checkpoint | Passes over `data/min` | Replay error, mean (worst joint) | S1:A | T1:A:left |
 |---|---|---|---|---|
 | 5k | ~1.3 | 0.018-0.033 rad (0.04-0.07, the wrist) | 0/3: drawer not opened, the other arm left home | 0/3: cube not at target |
 | 20k | ~5 | 0.010-0.016 rad (0.02-0.03) | 0/3: drawer opened, but **the other arm left home** every time (stop 0/3) | 0/3: 2 carried the cube to the left side but 3.5 cm past the spot (limit 2 cm); 1 never started the second arm |
+| 100k | ~25 | 0.0018-0.0034 rad (0.004-0.007) | 4/5; the other arm held still in 5/5; the fail slid the cube 5.2 mm (cube_kept_place; the 4 successes 3.8-4.0 mm) | 5/5, continue 5/5 |
 
-DP is learning (the replay error halved, the drawer now opens, the cube goes to the commanded side). The lead to check at 100k: under the S1 command DP goes on as in T1, which step 3's ACT never did (0/100). A possible reason is how the command enters: ACT gives the one-hot vector its own encoder token, DP appends its 11 numbers to the image and state features in the U-Net's conditioning. Three rollouts are a lead, not a finding.
+DP is learning (the replay error halved, the drawer now opens, the cube goes to the commanded side). The lead to check at 100k: under the S1 command DP goes on as in T1, which step 3's ACT never did (0/100). A possible reason is how the command enters: ACT gives the one-hot vector its own encoder token, DP appends its 11 numbers to the image and state features in the U-Net's conditioning. Three rollouts are a lead, not a finding. **At 100k the lead is gone:** the other arm stays home under the S1 command (5/5), so at 20k DP had not yet learnt to stop, and the command input works. The replay error at 100k is below ACT's (0.005-0.007). Five rollouts per variant (`outputs/min_dp/eval_100000`, CPU, ~3 min per S1 and ~5 min per T1 rollout) are a check, not a result.
+
+**Full evaluation with 10 DDIM steps (`scripts/eval_dp.sh`, queued).** DP denoises with the 100 DDPM steps it was trained with, ~3 min per S1 and ~5 min per T1 rollout, so 600 rollouts would take more than a day. `sim/evaluate.py --ddim 10` runs the same model with 10 DDIM steps on the same noise schedule, as Chi et al. (2023) run their real-robot policies. Offline replay, episodes 0 and 179: 0.0023 and 0.0034 rad mean error with DDIM, 0.0022 and 0.0028 with DDPM. The evaluation is the same as ACT's and SmolVLA's (train and held-out colours, 6 variants × 50; the three stress conditions, S1:A and T1:A:left × 20), plus a check: the first 10 starts of S1:A and T1:A:left with the 100 DDPM steps, against the same starts with DDIM.
 
 ## Findings and bugs
 

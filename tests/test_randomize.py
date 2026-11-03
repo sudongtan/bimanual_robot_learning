@@ -107,6 +107,11 @@ def test_commands(task):
     train = {RZ.command(task, s, RZ.Randomization(), **names) for s in SEEDS}
     held_out = RZ.command(task, 0, RZ.Randomization(split="eval"), **names)
     assert canonical in train and held_out not in train and len(train) == len(RZ.COMMANDS[task]) - 1
+    if task in RZ.STRESS_COMMANDS:
+        stress = {RZ.command(task, s, RZ.Randomization(wording_split="stress"), **names) for s in SEEDS}
+        assert len(stress) == len(RZ.STRESS_COMMANDS[task]) and not stress & (train | {held_out})
+        assert all("{" not in c for c in stress)
+    assert RZ.command(task, 0, RZ.Randomization(wording_split="blank"), **names) == ""
 
 
 @pytest.mark.parametrize("u", (-1, -0.5, 0.5, 1))

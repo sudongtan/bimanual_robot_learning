@@ -1,6 +1,6 @@
 # Status and handoff
 
-_Last updated: 2026-11-02 18:45 CET. Update this file whenever a job starts or ends._
+_Last updated: 2026-11-03 10:10 CET. Update this file whenever a job starts or ends._
 
 Where the project stands, what is running right now, and what comes next. The design is in the numbered docs (../README.md, "Documents"); this file is only the live state.
 
@@ -12,22 +12,23 @@ Where the project stands, what is running right now, and what comes next. The de
 | 2 | `data/min` recorded and checked (300 episodes) | 2data_collection.md |
 | 3 | ACT with the one-hot input, 6 variants: S1 72/100, T1 195/200; the command decides stop/continue and target every time. Held-out colours: S1 77/100, T1 194/200, no colour gap | 3train_evaluation.md |
 | 4 (trained) | SmolVLA, 20k steps on the 4090 (final loss 0.007). First check: 4/5 S1:A rollouts succeed (the failure is the slide), offline replay error 0.006–0.008 rad (ACT: 0.005–0.007) | `outputs/min_smolvla/eval_quick` |
+| 4 (evaluated) | SmolVLA, 6 variants × 50 under train / held-out colours / held-out wording: S1 76 / 71 / 49 of 100, T1 111 / 122 / 0 of 200 (ACT: S1 72, T1 195 on train). T1 misses are placement (it continues 198/200); unseen wording breaks it (3train_evaluation.md, step 4) | `outputs/min_smolvla/eval` |
+| 3b (trained) | DP, 100k steps on the 4090 (resumed from 50k after the disk filled). 100k check: offline replay 0.002–0.003 rad, no flags; S1:A 4/5 (the other arm still 5/5), T1:A:left 5/5. 10 DDIM steps replay as well as the 100 DDPM steps | `outputs/min_dp/eval_100000` |
 
 ## Running now
 
 | Job | Where | Started | Expected end | Check with |
 |---|---|---|---|---|
-| DP training (step 3b), 100k steps, batch 64 (smoke test: 0.33 s/step, 21.3 GB peak) | Rented RTX 4090 (Vast.ai instance 58799630), tmux session `dp` | 2026-11-02 15:42 CET | ~2026-11-03 00:55 CET | `ssh gpu "tail -c 200 bimanual/min_dp.log"` |
-| SmolVLA evaluation (step 4): train, eval_colours, eval_wording, 6 variants × 50 each | This Mac, detached (`scripts/eval_smolvla.sh`) | 2026-11-02 18:19 CET | ~2026-11-03 08:00 CET (~55 s per S1 rollout, ~95 s per T1) | `cat outputs/eval_smolvla.out; tail -3 outputs/min_smolvla_*.log` |
-| Step 5 stress tests: ACT (step 3) and SmolVLA under `stress_distractors`, `stress_start_pose`, `stress_cube_yaw`, S1:A and T1:A:left × 20 each | This Mac, detached (`scripts/stress.sh`), waits for the SmolVLA evaluation | queued | ~4–5 h after it starts (240 rollouts at ~65 s), ~2026-11-03 13:00 CET | `cat outputs/stress.out` |
+| Step 5 stress tests: ACT (step 3) and SmolVLA under `stress_distractors`, `stress_start_pose`, `stress_cube_yaw`, S1:A and T1:A:left × 20 each; then SmolVLA under `stress_wording` (same) and `stress_blank_command` (S1:A × 20) | This Mac, detached (`scripts/stress.sh`) | 2026-11-03 09:37 CET | ~2026-11-03 15:30–16:00 CET (ACT ~46 s per S1, ~83 s per T1 rollout) | `cat outputs/stress.out` |
+| DP evaluation (`scripts/eval_dp.sh`, 10 DDIM steps): train and eval_colours 6 × 50, stress S1:A and T1:A:left × 20, then 10 + 10 with the 100 DDPM steps as a check | Mac GPU, nohup; waits for the stress tests | queued since 2026-11-03 09:30 CET | ~13 h after it starts, ~2026-11-04 05:00 CET (estimate, until the first DDIM rollouts are timed) | `cat outputs/eval_dp.out` |
 
-**The rented machine:** reached as `ssh gpu` (alias in this Mac's `~/.ssh/config`: 195.224.35.250, port 20412, user root). Vast's login opens its own tmux, so watch a session with `ssh -t gpu "tmux attach -t train"` (leave with `Ctrl-b d`, never `Ctrl-c`). Files are in `/root/bimanual`. It bills about $0.33/h until it is **deleted** in the Vast dashboard (the user deletes it).
+**The rented machine:** reached as `ssh gpu` (alias in this Mac's `~/.ssh/config`: 195.224.35.250, port 20412, user root). Vast's login opens its own tmux, so watch a session with `ssh -t gpu "tmux attach -t train"` (leave with `Ctrl-b d`, never `Ctrl-c`). Files are in `/root/bimanual`. It bills about $0.33/h until it is **deleted** in the Vast dashboard (the user deletes it). Idle since DP ended (2026-11-03 02:52 CET); everything needed is copied to this Mac.
 
 ## Next
 
-1. SmolVLA's copy-back and evaluation are automated (`scripts/eval_smolvla.sh`, above; results in `outputs/min_smolvla/eval/<condition>/`). Record them in 3train_evaluation.md when done.
-2. When DP ends: copy it back the same way (`outputs/min_dp`), then ask the user to delete the instance. Interim checks at 5k and 20k (3train_evaluation.md, step 3b): learning, but at 20k the S1 command doesn't stop it (the other arm leaves home in 3/3); check that first at 100k (`zsh scripts/check_dp.sh 100000 5`, CPU). DP evaluation is slow on the Mac (~146 s per S1 rollout, ~a day for 300); options to decide with the user: fewer denoising steps at inference (DDIM; a method change to report) or evaluating on the rented machine (untested headless MuJoCo rendering).
-3. Step 5 (stress tests, 1tasks_scene.md): add DP to `scripts/stress.sh` once it is trained; then the factors that need code (cube start past the training range, camera pose, mid-episode disturbance). Residual RL is parked as optional step 6, only for a gap step 5 finds.
+1. SmolVLA evaluated (3train_evaluation.md, step 4). Open: whether its loose T1 placement is the policy or the 50-action open-loop execution (a re-planning test, e.g. `n_action_steps` 10, ~40 min; not run).
+2. DP trained (100k, `outputs/min_dp/checkpoints/100000`; ended 2026-11-03 02:52 CET, copy verified; the user can delete the Vast instance). 100k check (3train_evaluation.md, step 3b): no flags, replay 0.002-0.003 rad, S1:A 4/5 with the other arm still in 5/5, T1:A:left 5/5. Decided with the user: the full evaluation with 10 DDIM steps (`--ddim 10`; offline replay error unchanged), checked against the 100 DDPM steps on 20 rollouts (`scripts/eval_dp.sh`, queued).
+3. Step 5 (stress tests, 1tasks_scene.md): DP's stress tests are in `scripts/eval_dp.sh`; then the factors that need code (cube start past the training range, camera pose, mid-episode disturbance). Residual RL is parked as optional step 6, only for a gap step 5 finds.
 4. Record each result in 3train_evaluation.md and the status lines in README.md, 1tasks_scene.md and this file.
 
 ## Open questions for the user

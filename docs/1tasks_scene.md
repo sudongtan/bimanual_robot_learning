@@ -10,7 +10,8 @@ The workcell, a scripted expert for all six tasks, the per-episode randomisation
 - **Step 1 done:** ACT on S1 arm A, 88% (44/50) on eval starts, all successes stopped, with temporal ensembling. Training on `action_nominal` gave 82%, no real difference, so `action` is kept.
 - **Steps 2–3 done:** `data/min` (300 episodes); one ACT with the one-hot variant input: S1 72/100, T1 195/200, stop and continue follow the command every time (no S1 rollout took the cube out, every T1 rollout continued, no cube on the wrong side). All S1 failures are the 5 mm slide limit. Held-out colours: S1 77/100, T1 194/200, no gap.
 - **Step 4 trained** on a rented RTX 4090 ([4cloud_training.md](4cloud_training.md)), 20k steps; a first check succeeds on 4/5 S1:A rollouts (the failure is the slide). Full evaluation queued on the Mac.
-- **Now:** step 3b (Diffusion Policy) training on the 4090 (at 20k it opens the drawer and carries the cube to the commanded side, but doesn't yet stop under S1); step 4's full evaluation running on the Mac; step 5 (stress tests, which replaced residual RL) queued after it.
+- **Step 4 evaluated** (3train_evaluation.md): SmolVLA is level with ACT on S1, T1 56% against 98% (loose placement; it continues 198/200), no colour gap; under the held-out sentence shape T1 fails 200/200.
+- **Now:** step 5 (stress tests, which replaced residual RL) running on the Mac for ACT and SmolVLA; then step 3b's evaluation (Diffusion Policy, trained 100k steps on the 4090; 10 DDIM steps, `scripts/eval_dp.sh`).
 
 Validation, `python -m sim.validate 40` (40 random starts per arm and per target, all randomisation on, expert at 50 Hz as recorded):
 
@@ -173,11 +174,12 @@ python -m sim.validate 40 all eval      # held-out colours and phrasings
 | `sim/record.py` | Episode recorder: LeRobot dataset plus exact-replay states, see `2data_collection.md` |
 | `sim/check_data.py` | First-batch checks on a recorded dataset (images, actions, labels), see `2data_collection.md` |
 | `sim/colour_contrast.py` | Cube colour sweep: contrast of each palette (and rejected) colour with its surroundings on a recorded dataset, see `2data_collection.md`, "Cube colours" |
-| `sim/evaluate.py` | Policy rollouts in sim under the evaluation conditions in the plan (fixed horizon; success, stop rate, continue rate; `--temporal-ensemble` for ACT); logs each rollout's checks, cube slide and final position |
-| `sim/residual.py` | Residual RL (minimal plan step 5): base policy plans every `PLAN_EVERY` frames, a bounded residual corrects each frame; scored by the evaluation's `Tracker` |
+| `sim/evaluate.py` | Policy rollouts in sim under the evaluation conditions in the plan and the step-5 stress conditions (fixed horizon; success, stop rate, continue rate; `--temporal-ensemble` for ACT, `--ddim` for DP); logs each rollout's checks, cube slide and final position |
+| `sim/offline_check.py` | Early checks on a checkpoint without the simulator: normalisation floor, replay of training episodes (3train_evaluation.md, finding 10) |
+| `sim/residual.py` | Residual RL (minimal plan step 6, optional, parked): base policy plans every `PLAN_EVERY` frames, a bounded residual corrects each frame; scored by the evaluation's `Tracker` |
 | `sim/dataset_view.py` | A training view of a recorded dataset: `--variant-input` (adds the one-hot variant vector as `observation.environment_state`), `--nominal` (train on `action_nominal`; used only in step 1) |
-| `scripts/` | The runs behind the results: `train_step1.sh` (step 1), `step2_3.sh` (steps 2–3, unattended: record, check, view, train, evaluate) |
-| `cloud/train.sh`, `4cloud_training.md` | ACT or SmolVLA training on a rented CUDA GPU (LeRobot only; evaluation stays on the Mac), and the step-by-step instructions |
+| `scripts/` | The runs behind the results: `train_step1.sh` (step 1), `step2_3.sh` (steps 2–3, unattended: record, check, view, train, evaluate), `eval_smolvla.sh` (step 4), `check_dp.sh` (DP checkpoint checks), `stress.sh` (step 5, ACT and SmolVLA), `eval_dp.sh` (step 3b's evaluation and stress tests) |
+| `cloud/train.sh`, `4cloud_training.md` | ACT, SmolVLA or DP training on a rented CUDA GPU (LeRobot only; evaluation stays on the Mac), and the step-by-step instructions; `cloud/dp_resume.sh` resumes a run and keeps optimizer state for the latest checkpoint only |
 | `tests/` | `test_workcell.py` (geometry, reach), `test_randomize.py` (randomisation, seeds), `test_tasks.py` (episodes, exact replay), `test_episode.py` (starts, success checks), `test_record.py` (recorder, dataset views), `test_evaluate.py` (rollout loop with the expert's commands), `test_residual.py` (the residual-RL episode) |
 | `deprecated/` | The earlier design; ignore |
 
@@ -219,9 +221,11 @@ The full plan below records all 20 variants before reaching the VLA. This versio
 | `stress_distractors` | all three distractors every time (training: 0–2) | 120/120 |
 | `stress_start_pose` | arm start-pose noise 3× (σ 0.06 rad per joint; training: 0.02) | 120/120 |
 | `stress_cube_yaw` | the cube turned up to ±40° in the drawer (training: ±20°) | 118/120 (one start, 100010, T1 opener A: the cube misses its target) |
+| `stress_wording` (SmolVLA) | eight more held-out phrasings per task (`RZ.STRESS_COMMANDS`: synonyms, other structures, terse and polite forms), one per rollout; `eval_wording` has only one per task | — (the expert doesn't read commands) |
+| `stress_blank_command` (SmolVLA) | an empty command, on S1:A (every variant gets the same input from the same seed). S1 and T1 share the start scene, so stopping or continuing shows whether the command is read at all, as LIBERO-PRO checks with corrupted instructions | — |
 | next, with small code changes | the cube's start shifted past the training range; camera pose moved a few cm or degrees; a disturbance mid-episode (cube nudged, drawer pushed back), which tests recovery | — |
 
-Each on S1:A and T1:A:left, 20 rollouts each (the expert passes them, so failures are the policy's). Report per policy and condition, against the train condition on the same seeds, with the failed checks.
+Each on S1:A and T1:A:left, 20 rollouts each (the expert passes them, so failures are the policy's); ACT and SmolVLA in `scripts/stress.sh`, DP in `scripts/eval_dp.sh`. Report per policy and condition, against the train condition on the same seeds, with the failed checks.
 
 **Step 6 (optional): residual RL (`sim/residual.py`, written and tested; parked).** Only if step 5 finds a gap a residual can plausibly close, such as recovery from a mid-episode disturbance, the robustness ResiP (Ankile et al. 2024) and Policy Decorator (Yuan et al., ICLR 2025) report. Design: the frozen base plans a chunk from the cameras every `PLAN_EVERY` = 25 frames; a residual adds a bounded correction (≤ `RES_SCALE` = 0.05 rad per joint) from the joints, the base command, the simulator's state and the one-hot variant; PPO on the evaluation's own result, training seeds only. `tests/test_residual.py` checks the wrapper (the expert's commands as base chunks succeed and stop; a zero residual changes nothing). The residual's use of simulator state is privileged information, to be stated with any result.
 

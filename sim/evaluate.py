@@ -27,6 +27,9 @@ The COLOSSEUM (Pumacay et al. 2024) perturbs one factor at a time:
     stress_distractors   all three distractors every time (training: 0-2)
     stress_start_pose    arm start-pose noise 3x (σ 0.06 rad per joint; training: 0.02)
     stress_cube_yaw      the cube turned up to ±40° in the drawer (training: ±20°)
+    stress_wording       eight more held-out phrasings per task, one per rollout (language-conditioned only)
+    stress_blank_command an empty command (language-conditioned only): S1 and T1 share the start scene, so
+                         whether it stops or continues shows whether it reads the command at all
 
 Writes `<out>/<condition>/episodes.jsonl` (one line per rollout: variant, seed, success, checks,
 stopped or continued) and `summary.json`, plus overview videos of the first --videos rollouts per variant.
@@ -65,13 +68,17 @@ CONDITIONS = {"train": RZ.Randomization(),
               "eval_wording": RZ.Randomization(wording_split="eval"),
               "stress_distractors": RZ.Randomization(distractors=len(RZ.DISTRACTORS), distractors_min=len(RZ.DISTRACTORS)),
               "stress_start_pose": RZ.Randomization(start_noise=3 * RZ.START_NOISE),
-              "stress_cube_yaw": RZ.Randomization(cube_yaw_drawer=40.0)}
+              "stress_cube_yaw": RZ.Randomization(cube_yaw_drawer=40.0),
+              "stress_wording": RZ.Randomization(wording_split="stress"),
+              "stress_blank_command": RZ.Randomization(wording_split="blank")}
 
 
-def load_policy(path: Path, device: str, temporal_ensemble: float | None = None):
+def load_policy(path: Path, device: str, temporal_ensemble: float | None = None, ddim: int | None = None):
     """A LeRobot checkpoint (`pretrained_model` directory) with its pre- and post-processors. ACT only:
     `temporal_ensemble` predicts a chunk every frame and averages the overlapping predictions with weights
-    exp(-coeff * i) (ACT's temporal ensembling, used for its sim results; Zhao et al. 2023 use 0.01)."""
+    exp(-coeff * i) (ACT's temporal ensembling, used for its sim results; Zhao et al. 2023 use 0.01).
+    DP only: `ddim` denoises with DDIM in this many steps instead of the 100 DDPM steps it was trained with
+    (the same noise schedule; Chi et al. 2023 run their real-robot policies this way)."""
     from lerobot.configs.policies import PreTrainedConfig
     from lerobot.policies.factory import get_policy_class, make_pre_post_processors
 
@@ -79,6 +86,8 @@ def load_policy(path: Path, device: str, temporal_ensemble: float | None = None)
     cfg.device = device
     if temporal_ensemble is not None:
         cfg.temporal_ensemble_coeff, cfg.n_action_steps = temporal_ensemble, 1
+    if ddim is not None:
+        cfg.noise_scheduler_type, cfg.num_inference_steps = "DDIM", ddim
     policy = get_policy_class(cfg.type).from_pretrained(path, config=cfg)
     policy.eval()
     # Render at the training size: ACT/DP keep the dataset's image shape (C, H, W); SmolVLA keeps its own camera
@@ -185,14 +194,16 @@ def main():
     p.add_argument("--device", default="mps" if torch.backends.mps.is_available() else "cpu")
     p.add_argument("--temporal-ensemble", type=float, default=None, metavar="COEFF",
                    help="ACT: temporal ensembling with this coefficient (ACT used 0.01); default: run each chunk open loop")
+    p.add_argument("--ddim", type=int, default=None, metavar="STEPS",
+                   help="DP: denoise with DDIM in this many steps (default: the 100 DDPM steps it was trained with)")
     a = p.parse_args()
 
     out = (a.out or a.checkpoint.parent / "eval") / a.condition
     out.mkdir(parents=True, exist_ok=True)
-    policy, pre, post = load_policy(a.checkpoint, a.device, a.temporal_ensemble)
+    policy, pre, post = load_policy(a.checkpoint, a.device, a.temporal_ensemble, a.ddim)
     rand = CONDITIONS[a.condition]
     summary = {"checkpoint": str(a.checkpoint), "condition": a.condition, "temporal_ensemble": a.temporal_ensemble,
-               "train_seeds": a.train_seeds, "variants": {}}
+               "ddim": a.ddim, "train_seeds": a.train_seeds, "variants": {}}
     with open(out / "episodes.jsonl", "w") as log:
         for variant in R.parse_variants(a.variants):
             name = ":".join(x for x in variant if x)
