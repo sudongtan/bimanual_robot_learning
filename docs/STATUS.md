@@ -1,6 +1,6 @@
 # Status and handoff
 
-_Last updated: 2026-11-03 15:45 CET. Update this file whenever a job starts or ends._
+_Last updated: 2026-11-03 19:35 CET. Update this file whenever a job starts or ends._
 
 Where the project stands, what is running right now, and what comes next. The design is in the numbered docs (../README.md, "Documents"); this file is only the live state.
 
@@ -22,6 +22,7 @@ Where the project stands, what is running right now, and what comes next. The de
 |---|---|---|---|---|
 | DP evaluation (`scripts/eval_dp.sh`, 10 DDIM steps): train and eval_colours 6 × 50, stress S1:A and T1:A:left × 20, then 10 + 10 with the 100 DDPM steps as a check | Mac GPU, nohup | 2026-11-03 14:32 CET | ~2026-11-04 04:00–04:30 CET (~39 s per S1 rollout with DDIM) | `cat outputs/eval_dp.out` |
 | Start-pose rerun (finding 11): ACT and SmolVLA under `stress_start_pose`, S1:A and T1:A:left × 20, now logging the idle arm's distance outside its start–home range (`idle_arm_rad.away`) | Mac GPU, nohup (`scripts/rerun_start_pose.sh`), waits for DP | queued 2026-11-03 15:40 CET | ~1.5 h after DP, ~2026-11-04 06:00 CET | `cat outputs/rerun_start_pose.out` |
+| DP T1 rerun (`scripts/eval_dp_t1.sh`): T1's four variants under train and eval_colours × 50, 10 DDIM steps. `eval_dp.sh` ran those conditions without `--variants`, so it evaluated S1:A, S1:B, then S2:A and stopped on an error in S2's check tally before T1 (its S1 results are kept) | Mac GPU, nohup, waits for the queue | queued 2026-11-03 19:35 CET | ~2026-11-04 06:00 CET | `cat outputs/eval_dp_t1.out` |
 
 **The rented machine:** reached as `ssh gpu` (alias in this Mac's `~/.ssh/config`: 195.224.35.250, port 20412, user root). Vast's login opens its own tmux, so watch a session with `ssh -t gpu "tmux attach -t train"` (leave with `Ctrl-b d`, never `Ctrl-c`). Files are in `/root/bimanual`. It bills about $0.33/h until it is **deleted** in the Vast dashboard (the user deletes it). Idle since DP ended (2026-11-03 02:52 CET); everything needed is copied to this Mac.
 

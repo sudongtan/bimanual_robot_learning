@@ -2,11 +2,12 @@
 
     .venv/bin/python scripts/readme_gif.py outputs/min_smolvla/eval/eval_colours --seed 100001 \
         --variants S1:B T1:B:left T1:B:right --out docs/media/same_scene_three_commands.gif \
-        --footer "SmolVLA, same start scene (held-out cube colour), 2x speed"
+        --shared 425 --footer "SmolVLA, same start scene (held-out cube colour); 4x until the drawer is open, then 2x"
 
 Uses the overview videos `sim.evaluate --videos N` saves (`<variant>_<seed>_ok|fail.mp4`) and each rollout's command
-from `episodes.jsonl` in the same directory. Every 8th frame of 50 fps played at 12.5 fps (2x speed); shorter clips
-hold their last frame. Needs ffmpeg for the GIF palette.
+from `episodes.jsonl` in the same directory. Every 8th frame of 50 fps played at 12.5 fps (2x speed), every 16th (4x)
+before --shared, where the rollouts still look alike (all open the drawer with the same arm until ~frame 440 here);
+shorter clips hold their last frame. Needs ffmpeg for the GIF palette.
 """
 import argparse
 import json
@@ -30,6 +31,7 @@ def main():
     p.add_argument("--seed", type=int, required=True)
     p.add_argument("--variants", nargs="+", required=True, help="e.g. S1:B T1:B:left")
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--shared", type=int, default=0, help="play frames before this one at twice the speed")
     p.add_argument("--footer", default="SmolVLA, same start scene, 2x speed")
     a = p.parse_args()
 
@@ -41,7 +43,8 @@ def main():
     videos = []
     for v in a.variants:
         (path,) = a.run.glob(f"{v.replace(':', '_')}_{a.seed}_*.mp4")
-        videos.append(iio.imread(path)[::STEP])
+        frames = iio.imread(path)
+        videos.append(np.concatenate([frames[: a.shared : 2 * STEP], frames[a.shared :: STEP]]))
         print(f"{v}: {path.name}, success {episodes[v]['success']}, cube {episodes[v]['cube_colour']}")
 
     k = len(a.variants)
