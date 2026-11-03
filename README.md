@@ -2,6 +2,10 @@
 
 A simulated two-arm SO-101 workcell (MuJoCo) where **the command is the only thing that tells the policy what to do**: which task, which arm, and where the cube goes.
 
+![SmolVLA from one start scene under three commands: arm B opens the drawer and stops; or arm B opens it and arm A puts the cube on the left, or on the right](docs/media/same_scene_three_commands.gif)
+
+*The same start scene, three commands: SmolVLA stops after opening the drawer, or hands over to arm A and puts the cube where it was told. Seed 100001, cube colour not seen in training.*
+
 **What it does**
 - The tasks are designed so that each can be done by either arm from the same start scenes, so nothing in the scene gives away the task, the arm or the target; a policy can only succeed by following the command.
 - It tests whether a fine-tuned vision-language-action model (SmolVLA) takes the task, the arm and the target from the command, including when control passes from one arm to the other.
