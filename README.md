@@ -10,7 +10,7 @@ A simulated two-arm SO-101 workcell (MuJoCo) where **the command is the only thi
 - The tasks are designed so that each can be done by either arm from the same start scenes, so nothing in the scene gives away the task, the arm or the target; a policy can only succeed by following the command.
 - It tests whether a fine-tuned vision-language-action model (SmolVLA) takes the task, the arm and the target from the command, including when control passes from one arm to the other.
 - It measures how well SmolVLA then does the task, against imitation policies (ACT, Diffusion Policy) that are told the task directly.
-- Results so far cover one shared start scene and two of the six designed tasks (S1 and T1, below).
+- The results cover one shared start scene and two of the six designed tasks (S1 and T1, below); the other four are [planned](#planned-work).
 
 **Why this matters**
 - A high success rate doesn't show that a policy read the instruction: if a scene only ever appears with one task, the policy can learn the scene and ignore the command.
@@ -19,10 +19,10 @@ A simulated two-arm SO-101 workcell (MuJoCo) where **the command is the only thi
 - With two arms the command can also name which arm acts, but in existing bimanual setups the scene usually gives that away: in [BiDex-100](https://arxiv.org/abs/2610.25459) the named arm is on its object's side, and in ALOHA and RoboTwin the task or the object's side decides the arm.
 - Details and references: [docs/0background.md](docs/0background.md).
 
-**Main results so far** (SmolVLA, simulation, 50 rollouts per variant)
+**Main results** (SmolVLA, simulation, 50 rollouts per variant)
 - **It depends on the command.** From identical scenes it does the commanded task in 298 of 300 rollouts (stop, or hand over to the named arm); with an empty command it fails 20 of 20.
 - **It only follows wording close to its training.** Under a held-out sentence shape the second arm never takes over (0 of 200).
-- **It does the task worse than ACT told the task directly**, mainly placing the cube: 111 of 200 against 195 of 200.
+- **It does the task worse than imitation policies told the task directly**, mainly placing the cube: T1 111 of 200, against ACT's 195 and Diffusion Policy's 181.
 
 ## Tasks
 
@@ -31,21 +31,21 @@ Six tasks, each doable by either arm from the same start scenes (20 command vari
 | | Task | Example command | |
 |---|---|---|---|
 | S1 | Open drawer | "open the drawer with arm A" | evaluated |
-| S2 | Close drawer | "close the drawer with arm B" | on hold |
-| S3 | Cube into drawer | "put the cube in the drawer with arm A" | on hold |
-| S4 | Cube out of drawer | "take the cube out of the drawer and put it on the left of the table with arm B" | on hold |
+| S2 | Close drawer | "close the drawer with arm B" | planned |
+| S3 | Cube into drawer | "put the cube in the drawer with arm A" | planned |
+| S4 | Cube out of drawer | "take the cube out of the drawer and put it on the left of the table with arm B" | planned |
 | T1 | Open, then take out (two arms) | "open the drawer with arm A, then take the cube out and put it on the right of the table with arm B" | evaluated |
-| T2 | Put in, then close (two arms) | "put the cube in the drawer with arm B, then close the drawer with arm A" | on hold |
+| T2 | Put in, then close (two arms) | "put the cube in the drawer with arm B, then close the drawer with arm A" | planned |
 
-The tasks on hold are designed and scripted, but not yet recorded or trained on. Variants are written task:arm(:target): S1:A is S1 with arm A; T1:A:left is T1 with arm A opening and the cube put on the left.
+The planned tasks are designed and scripted (the expert does each one), but not recorded or trained on. Variants are written task:arm(:target): S1:A is S1 with arm A; T1:A:left is T1 with arm A opening and the cube put on the left.
 
-## Results (draft: Diffusion Policy's evaluation is running)
+## Results
 
 **Setup.** One start scene (drawer closed, cube inside) shared by S1 and T1. Six variants: S1:A, S1:B, and T1 with either arm opening and the cube to the left or right. 300 scripted demonstrations (50 per variant), one training run per policy, 50 rollouts per variant on starts not used in training.
 
 **Policies.**
 - **SmolVLA** (the subject): fine-tuned on the 300 demonstrations with their text commands, two phrasings per task.
-- **ACT and Diffusion Policy** (references): trained on the same demonstrations, but told the variant directly as a one-hot code, the way Meta-World MT10/MT50 gives multi-task policies a task ID. They show how well the task can be done from this data when the task is known; they never see words, so they can't be tested on language. Diffusion Policy is trained; its results will be added when its evaluation finishes.
+- **ACT and Diffusion Policy** (references): trained on the same demonstrations, but told the variant directly as a one-hot code, the way Meta-World MT10/MT50 gives multi-task policies a task ID. They show how well the task can be done from this data when the task is known; they never see words, so they can't be tested on language. Diffusion Policy is evaluated with 10 denoising steps instead of the 100 it was trained with (as its authors run their real-robot policies), checked against the full 100 on the same starts: S1 9/10 both ways, T1 8/10 against 10/10.
 
 Every count with its failed checks: [docs/3train_evaluation.md](docs/3train_evaluation.md).
 
@@ -69,44 +69,64 @@ Every count with its failed checks: [docs/3train_evaluation.md](docs/3train_eval
 
 **Result.** Phrasings close to the training ones work ("with arm A, open the drawer" 6/6); other structures fail ("can you open the drawer using arm A?" 0/3). This is the opposite of what LIBERO-PRO and LIBERO-Plus found on LIBERO, where VLAs kept succeeding with reworded, empty or nonsense instructions because each scene points to its task. Here the scene can't tell the task, so the text can't be ignored, and changing its wording breaks the policy.
 
-**Conclusion.** No: it follows its training wording and phrasings close to it. Whether that comes from the VLA or from training on two phrasings per task is not tested yet (Q5).
+**Conclusion.** No: it follows its training wording and phrasings close to it. Whether that comes from the VLA or from training on two phrasings per task is not tested ([planned](#planned-work)).
 
-### 3. How well does it do the task, against a policy told the task?
+### 3. How well does it do the task, against policies told the task?
 
-**Test.** The same starts for both policies. S1 is scored with and without its 5 mm limit on how far the cube may slide in the drawer (the expert's largest slide is 4.0 mm).
+**Test.** The same starts for all three policies. S1 is scored with and without its 5 mm limit on how far the cube may slide in the drawer (the expert's largest slide is 4.0 mm).
 
-| | ACT | SmolVLA |
-|---|---|---|
-| S1 task: drawer opened, arms held still | 100/100 | 97/100 |
-| S1 success: also cube slid < 5 mm | 72/100 | 76/100 |
-| T1 success: cube within 2 cm of the named spot | 195/200 | 111/200 |
-| Held-out cube colours, S1 / T1 success | 77 / 194 | 71 / 122 |
+| | ACT | Diffusion Policy | SmolVLA |
+|---|---|---|---|
+| S1 task: drawer opened, arms held still | 100/100 | 100/100 | 97/100 |
+| S1 success: also cube slid < 5 mm | 72/100 | 82/100 | 76/100 |
+| T1 success: cube within 2 cm of the named spot | 195/200 | 181/200 | 111/200 |
+| Held-out cube colours, S1 / T1 success | 77 / 194 | 81 / 165 | 71 / 122 |
 
-**Result.** S1: ACT does the task every time but slides the cube 4.2–4.9 mm (median), so its success rate moves with the limit (94–98% at 6 mm). SmolVLA pulls more gently but misses the task in 3 of 100. T1: every SmolVLA failure is the cube away from its spot, not the wrong arm or step. Unseen cube colours make no difference to either.
+**Result.** S1: ACT and Diffusion Policy do the task every time but slide the cube 4–5 mm (median), so their success rates move with the limit (94–100% at 6 mm). SmolVLA pulls more gently but misses the task in 3 of 100. T1: every failure, for all three, is the cube away from its spot, not the wrong arm or step; Diffusion Policy's misses are mostly just past the 2 cm limit, and with the training colours only when arm B places the cube. Unseen cube colours make no difference to ACT or SmolVLA; they cost Diffusion Policy 16 T1 successes.
 
-**Conclusion.** SmolVLA does the task worse than ACT, mainly the T1 placement. Not tested yet: whether that is the model or how it is run (it executes 50 actions before looking again, where ACT re-plans every frame; re-planning took ACT from 4/10 to 10/10 on S1).
+**Conclusion.** SmolVLA does the task worse than both references, mainly the T1 placement. Not tested ([planned](#planned-work)): whether that is the model or how it is run (it executes 50 actions before looking again, where ACT re-plans every frame; re-planning took ACT from 4/10 to 10/10 on S1).
 
 ### 4. How does each policy hold up when the scene goes past its training range?
 
 **Test.** One scene factor at a time pushed past its training range, on S1:A and T1:A:left, 20 rollouts each, against the same 20 starts unchanged. This compares the policies as wholes, as RoboTwin 2.0, LIBERO-Plus and the SmolVLA paper do: SmolVLA and ACT differ in architecture, input, size, pretraining and how they are run, so a difference can't be put down to any one of these.
 
-| Change | ACT S1:A task | SmolVLA S1:A task | ACT T1:A:left success | SmolVLA T1:A:left success |
-|---|---|---|---|---|
-| None (same 20 starts) | 20/20 | 20/20 | 19/20 | 12/20 |
-| All three distractors (training: 0–2) | 20/20 | 19/20 | 19/20 | 14/20 |
-| Cube turned up to ±40° (training: ±20°) | 20/20 | 19/20 | 18/20 | 9/20 |
+S1:A, task done (drawer opened, arms held still):
 
-A wider arm start pose was also run, but the idle-arm check misreads it (both policies move the idle arm back towards its usual pose, which the check counts as moving it; [finding 11](docs/3train_evaluation.md#findings-and-bugs)). It will be reported after a rerun with a corrected check.
+| Change | ACT | Diffusion Policy | SmolVLA |
+|---|---|---|---|
+| None (same 20 starts) | 20/20 | 20/20 | 20/20 |
+| All three distractors (training: 0–2) | 20/20 | 20/20 | 19/20 |
+| Cube turned up to ±40° (training: ±20°) | 20/20 | 20/20 | 19/20 |
+| Arm start pose 3× wider* | 18/20 | 19/20 | 19/20 |
 
-**Result.** S1: neither distractors nor the turned cube affect either policy. T1: ACT stays at 18–19/20; SmolVLA moves between 9 and 14/20 from its 12/20 unchanged. Both still hand over to the named arm under each change.
+T1:A:left, success:
 
-**Conclusion.** On S1 both policies hold up to these changes. On T1 the comparison can't be read yet: SmolVLA already places the cube loosely without any change (Q3), and with 20 rollouts per cell differences of 3–4 are within noise.
+| Change | ACT | Diffusion Policy | SmolVLA |
+|---|---|---|---|
+| None (same 20 starts) | 19/20 | 17/20 | 12/20 |
+| All three distractors | 19/20 | **10/20** | 14/20 |
+| Cube turned up to ±40° | 18/20 | **10/20** | 9/20 |
+| Arm start pose 3× wider | 17/20 | **12/20** | 14/20 |
 
-### 5. Is the wording failure specific to the VLA? (planned)
+\* Scored with a corrected idle-arm measure: the original check counted a policy moving the idle arm back towards its usual pose as moving it ([finding 11](docs/3train_evaluation.md#findings-and-bugs)).
 
-Q2's wording failure could come from the VLA, or simply from training on two phrasings per task, which any policy reading text would suffer from. ACT and Diffusion Policy can't tell these apart, because they get a code, not words. The planned test gives them the same commands through a frozen DistilBERT sentence embedding, as OpenVLA's Diffusion Policy baseline on LIBERO does, and evaluates them on the same wordings as SmolVLA. Design: [docs/3train_evaluation.md](docs/3train_evaluation.md#planned-act-and-dp-reading-the-text-commands-readme-q5-not-run).
+**Result.** S1: none of the changes affects any of the three. T1: ACT stays at 17–19/20; Diffusion Policy drops from 17/20 to 10–12/20 under every change, every failure the cube away from its spot (not from its 10 denoising steps: on these starts it is 8/10 with them unchanged); SmolVLA moves between 9 and 14/20 from its 12/20 unchanged. All three still hand over to the named arm under each change (19–20/20).
+
+**Conclusion.** On S1 all three hold up to these changes. On T1, ACT holds up and Diffusion Policy's placement doesn't: a drop of 5–7, beyond the 3–4 that 20 rollouts can't resolve. SmolVLA's T1 can't be read this way, since it already places the cube loosely without any change (Q3). Which of the policies' differences causes this isn't tested.
 
 **Limits.** Simulation only; one scene and two of the six designed tasks; one training run per policy; 20–50 rollouts per cell.
+
+## Planned work
+
+Designed but not run; the project ends with the results above.
+
+- **Is the wording failure specific to the VLA?** Q2's failure could come from the VLA, or simply from training on two phrasings per task, which any policy reading text would suffer from. ACT and Diffusion Policy can't tell these apart, because they get a code, not words. The test gives them the same commands through a frozen DistilBERT sentence embedding, as OpenVLA's Diffusion Policy baseline on LIBERO does, and evaluates them on the same wordings as SmolVLA. Design: [docs/3train_evaluation.md](docs/3train_evaluation.md#planned-act-and-dp-reading-the-text-commands-not-run).
+- **Is SmolVLA's loose placement the model or how it is run?** (Q3) Re-evaluate T1 with SmolVLA re-planning more often (e.g. 10 actions per chunk executed instead of 50), as re-planning fixed ACT's S1.
+- **Why Diffusion Policy's placement drops under scene changes** (Q4) and held-out colours (Q3), where ACT's doesn't.
+- **More stress factors**, which need small code changes: the cube's start shifted past the training range, the camera pose moved, and a disturbance mid-episode (cube nudged, drawer pushed back) to test recovery.
+- **Error bars:** more training seeds per policy, so differences of a few rollouts can be read.
+- **The other four tasks and the full plan** ([docs/1tasks_scene.md](docs/1tasks_scene.md)): S2–S4 and T2 with their shared scenes, the middle target, the hand-over run as two primitive commands chained and zero-shot from primitives only, and π0 as a second VLA.
+- **Residual RL** on a frozen policy (`sim/residual.py`, written and tested), for a gap such as recovery from a disturbance.
 
 ## How this project developed
 
@@ -116,17 +136,16 @@ While designing the tasks, it became clear how easily a scene gives the task awa
 
 Not every part of the design kept up with that change, and some mistakes were found late:
 
-- **The baselines were chosen for the first question, not the second.** ACT and Diffusion Policy were given the task as a one-hot code so that one policy could cover every task (as Meta-World gives multi-task policies a task ID). The plan later used them to measure "the cost of reading language", which a policy that never reads words can't measure. They are now reported as references for doing the task, and the comparison that would answer the language question is planned (Q5).
+- **The baselines were chosen for the first question, not the second.** ACT and Diffusion Policy were given the task as a one-hot code so that one policy could cover every task (as Meta-World gives multi-task policies a task ID). The plan later used them to measure "the cost of reading language", which a policy that never reads words can't measure. They are now reported as references for doing the task, and the comparison that would answer the language question is [planned](#planned-work).
 - **Some measures measured a threshold or a check rather than the behaviour.** S1's success rate is mostly set by a 5 mm limit on how far the cube may slide (finding 9), and a wider arm start pose trips the idle-arm check when a policy only moves the arm back home (finding 11). Both are now reported apart from the behaviour.
-- **The scope was cut** to one shared scene (S1 and T1) to reach the VLA sooner; S2–S4 and T2 are designed and scripted but on hold.
+- **The scope was cut** to one shared scene (S1 and T1) to reach the VLA sooner; S2–S4 and T2 are designed and scripted, and planned.
 
 What held up is the core design: S1 and T1 start from identical scenes, so when SmolVLA stops or hands over, that choice can only have come from the command.
 
 ## Status
 
 - **Built and validated:** the workcell, a scripted expert for all six tasks (800/800 successful on random starts), randomisation, the recorder, data checks, and policy evaluation in sim.
-- **Now:** Diffusion Policy's evaluation (trained 100k steps on a rented RTX 4090; evaluated with 10 DDIM steps, checked against the 100 DDPM steps), then the start-pose rerun. Live state: [docs/STATUS.md](docs/STATUS.md).
-- **Next:** stress factors that need small code changes (cube start shifted, camera pose, a mid-episode disturbance). Residual RL is parked as an optional step 6, for a gap the stress tests find.
+- **Done (2026-11-04):** ACT, Diffusion Policy and SmolVLA trained, evaluated and stress-tested on the shared scene (Results above). The project ends here; what wasn't run is under [Planned work](#planned-work). Final state of the runs: [docs/STATUS.md](docs/STATUS.md).
 
 ## Quick start
 
@@ -147,7 +166,7 @@ Training uses LeRobot 0.6.1 (`lerobot-train`); the runs behind the results are i
 
 | File | Contents |
 |---|---|
-| [docs/STATUS.md](docs/STATUS.md) | What is running now, what's next, open questions |
+| [docs/STATUS.md](docs/STATUS.md) | Final state: what was run, where the outputs are, open questions |
 | [docs/0background.md](docs/0background.md) | Motivation, related work, the research question, what is evaluated, scope |
 | [docs/1tasks_scene.md](docs/1tasks_scene.md) | Tasks, scene, randomisation, the scripted expert, success checks, files, and the step-by-step plan |
 | [docs/2data_collection.md](docs/2data_collection.md) | Recording design, data checks, cube colours |

@@ -33,7 +33,7 @@ Both are evaluated with unseen colours, and the VLA also with unseen wording, ea
 - **Stop tests:** after "open the drawer", the scene is the start of "take the cube out". Does the policy stop because of the command, or carry on because of the scene? Every demonstration ends with a recorded 2 s hold at home, so stopping is in the training data, and rollouts run past the demonstration length so a policy that carries on is caught.
 - **Hand-over tests:** run a composite as two primitive commands in a row, switching arms between them, and see how much success is lost at the switch. For T1 the second command starts from a scene it was trained on; for T2 it doesn't (the drawer is partly open with the cube inside, which no close-the-drawer demo starts from), so T2's loss also includes an unseen start.
 
-The step-by-step training and evaluation plan is in [1tasks_scene.md](1tasks_scene.md): the minimal plan (one shared scene, S1 and T1, up to SmolVLA) is active; the full plan (all six tasks, Diffusion Policy, π0, the hand-over tests) is on hold beyond it.
+The step-by-step training and evaluation plan is in [1tasks_scene.md](1tasks_scene.md): the minimal plan (one shared scene, S1 and T1, ACT, Diffusion Policy and SmolVLA) is done, and the project ends there; the full plan (all six tasks, π0, the hand-over tests) is planned beyond it.
 
 ## Scope
 

@@ -6,13 +6,14 @@ Goal: collect scripted bimanual demos in sim of four primitive skills and two co
 
 ## Status
 
-The workcell, a scripted expert for all six tasks, the per-episode randomisation, the recorder and the success checks (which score a policy the same way as the expert, `sim/episode.py`) are built and validated. The step-0 batch is recorded and checked ([2data_collection.md](2data_collection.md)). Working to the **minimal plan** (below); results in [3train_evaluation.md](3train_evaluation.md):
+The workcell, a scripted expert for all six tasks, the per-episode randomisation, the recorder and the success checks (which score a policy the same way as the expert, `sim/episode.py`) are built and validated. The step-0 batch is recorded and checked ([2data_collection.md](2data_collection.md)). The **minimal plan** (below) is done and the project ends there (2026-11-04); results in [3train_evaluation.md](3train_evaluation.md):
 - **Step 1 done:** ACT on S1 arm A, 88% (44/50) on eval starts, all successes stopped, with temporal ensembling. Training on `action_nominal` gave 82%, no real difference, so `action` is kept.
 - **Steps 2–3 done:** `data/min` (300 episodes); one ACT with the one-hot variant input: S1 72/100, T1 195/200, stop and continue follow the command every time (no S1 rollout took the cube out, every T1 rollout continued, no cube on the wrong side). All S1 failures are the 5 mm slide limit. Held-out colours: S1 77/100, T1 194/200, no gap.
-- **Step 4 trained** on a rented RTX 4090 ([4cloud_training.md](4cloud_training.md)), 20k steps; a first check succeeds on 4/5 S1:A rollouts (the failure is the slide). Full evaluation queued on the Mac.
+- **Step 4 trained** on a rented RTX 4090 ([4cloud_training.md](4cloud_training.md)), 20k steps; a first check succeeds on 4/5 S1:A rollouts (the failure is the slide).
 - **Step 4 evaluated** (3train_evaluation.md): SmolVLA is level with ACT on S1, T1 56% against 98% (loose placement; it continues 198/200), no colour gap; under the held-out sentence shape T1 fails 200/200.
-- **Step 5 done for ACT and SmolVLA** (3train_evaluation.md): distractors don't matter; the turned cube costs SmolVLA's T1, not ACT's; SmolVLA follows phrasings close to its training ones and fails on other structures and an empty command.
-- **Now:** step 3b's evaluation and stress tests (Diffusion Policy, 10 DDIM steps, `scripts/eval_dp.sh`), ends ~2026-11-04 04:30.
+- **Step 3b evaluated** (3train_evaluation.md): Diffusion Policy, 10 DDIM steps: S1 82/100, T1 181/200 (held-out colours 81, 165); it follows the command every time.
+- **Step 5 done** (3train_evaluation.md): S1 on the task is unaffected by any change for all three policies; on T1, ACT holds, DP drops (17 → 10–12/20), SmolVLA not comparable. SmolVLA follows phrasings close to its training ones and fails on other structures and an empty command.
+- **Planned, not run:** everything else in this file (step 6, the stress factors that need code, and the full plan), plus ACT/DP reading the text commands; listed under "Planned work" in [../README.md](../README.md).
 
 Validation, `python -m sim.validate 40` (40 random starts per arm and per target, all randomisation on, expert at 50 Hz as recorded):
 
@@ -177,16 +178,16 @@ python -m sim.validate 40 all eval      # held-out colours and phrasings
 | `sim/colour_contrast.py` | Cube colour sweep: contrast of each palette (and rejected) colour with its surroundings on a recorded dataset, see `2data_collection.md`, "Cube colours" |
 | `sim/evaluate.py` | Policy rollouts in sim under the evaluation conditions in the plan and the step-5 stress conditions (fixed horizon; success, stop rate, continue rate; `--temporal-ensemble` for ACT, `--ddim` for DP); logs each rollout's checks, cube slide and final position |
 | `sim/offline_check.py` | Early checks on a checkpoint without the simulator: normalisation floor, replay of training episodes (3train_evaluation.md, finding 10) |
-| `sim/residual.py` | Residual RL (minimal plan step 6, optional, parked): base policy plans every `PLAN_EVERY` frames, a bounded residual corrects each frame; scored by the evaluation's `Tracker` |
+| `sim/residual.py` | Residual RL (minimal plan step 6, planned, not run): base policy plans every `PLAN_EVERY` frames, a bounded residual corrects each frame; scored by the evaluation's `Tracker` |
 | `sim/dataset_view.py` | A training view of a recorded dataset: `--variant-input` (adds the one-hot variant vector as `observation.environment_state`), `--nominal` (train on `action_nominal`; used only in step 1) |
 | `scripts/` | The runs behind the results: `train_step1.sh` (step 1), `step2_3.sh` (steps 2–3, unattended: record, check, view, train, evaluate), `eval_smolvla.sh` (step 4), `check_dp.sh` (DP checkpoint checks), `stress.sh` (step 5, ACT and SmolVLA), `eval_dp.sh` (step 3b's evaluation and stress tests) |
 | `cloud/train.sh`, `4cloud_training.md` | ACT, SmolVLA or DP training on a rented CUDA GPU (LeRobot only; evaluation stays on the Mac), and the step-by-step instructions; `cloud/dp_resume.sh` resumes a run and keeps optimizer state for the latest checkpoint only |
 | `tests/` | `test_workcell.py` (geometry, reach), `test_randomize.py` (randomisation, seeds), `test_tasks.py` (episodes, exact replay), `test_episode.py` (starts, success checks), `test_record.py` (recorder, dataset views), `test_evaluate.py` (rollout loop with the expert's commands), `test_residual.py` (the residual-RL episode) |
 | `deprecated/` | The earlier design; ignore |
 
-## Minimal plan (active): one scene, S1 and T1
+## Minimal plan (done): one scene, S1 and T1
 
-The full plan below records all 20 variants before reaching the VLA. This version reaches it with one start scene, **drawer closed with the cube inside**, shared by S1 and T1, as LIBERO-Goal puts all its tasks in one scene so only the instruction picks the goal. The rest of the full plan is on hold, not dropped: the expert and tests for every task stay as they are.
+The full plan below records all 20 variants before reaching the VLA. This version reaches it with one start scene, **drawer closed with the cube inside**, shared by S1 and T1, as LIBERO-Goal puts all its tasks in one scene so only the instruction picks the goal. The rest of the full plan is planned, not dropped: the expert and tests for every task stay as they are.
 
 | Task | Variants | Example command |
 |---|---|---|
@@ -213,7 +214,7 @@ The full plan below records all 20 variants before reaching the VLA. This versio
 | 3b | — | Diffusion Policy with the same variant input, all 6 variants (added 2026-11-02) | As step 3: a second imitation-learning baseline on the same scene and input, so step 3's results aren't specific to ACT |
 | 4 | — | SmolVLA fine-tuned on the same 300 episodes, with the commands | Same, under the train, eval-colours and eval-phrasing conditions. The gap to step 3 (and 3b) on the train condition is the cost of reading language |
 | 5 | — | — | **Stress tests** (replaced residual RL on 2026-11-02, below): steps 3, 3b and 4 under one factor at a time pushed past its training range |
-| 6 (optional) | — | Residual RL on a frozen policy, only for a gap step 5 finds | Below |
+| 6 (planned) | — | Residual RL on a frozen policy, only for a gap step 5 finds | Below |
 
 **Step 5: stress tests (`sim/evaluate.py`, `stress_*` conditions; `scripts/stress.sh`).** Why they replaced residual RL: steps 1–3 leave RL nothing real to fix. Every S1 rollout opens the drawer and the arms hold still; S1's success rate is set by how many slides of 4–6 mm fall under the 5 mm limit (the expert's largest is 4.0 mm, so the limit is our choice, not a task failure), and T1 is at 97.5%. RL on S1 would mostly learn to beat that threshold. Policies near 100% in distribution often fail once one factor moves past the training range: The COLOSSEUM (Pumacay et al. 2024) perturbs RLBench tasks one factor at a time (colours, sizes, camera, lighting, distractors) and finds drops of 30–75%; LIBERO-Plus and LIBERO-PRO (2025) find the same for VLAs at ~95% on LIBERO (object positions, camera, robot start pose, instructions ignored). The question it answers here: **does SmolVLA's pretraining buy robustness that ACT and DP don't have, and under which factor?** Evaluation only, no new data or training.
 
@@ -224,22 +225,22 @@ The full plan below records all 20 variants before reaching the VLA. This versio
 | `stress_cube_yaw` | the cube turned up to ±40° in the drawer (training: ±20°) | 118/120 (one start, 100010, T1 opener A: the cube misses its target) |
 | `stress_wording` (SmolVLA) | eight more held-out phrasings per task (`RZ.STRESS_COMMANDS`: synonyms, other structures, terse and polite forms), one per rollout; `eval_wording` has only one per task | — (the expert doesn't read commands) |
 | `stress_blank_command` (SmolVLA) | an empty command, on S1:A (every variant gets the same input from the same seed). S1 and T1 share the start scene, so stopping or continuing shows whether the command is read at all, as LIBERO-PRO checks with corrupted instructions | — |
-| next, with small code changes | the cube's start shifted past the training range; camera pose moved a few cm or degrees; a disturbance mid-episode (cube nudged, drawer pushed back), which tests recovery | — |
+| planned, with small code changes | the cube's start shifted past the training range; camera pose moved a few cm or degrees; a disturbance mid-episode (cube nudged, drawer pushed back), which tests recovery | — |
 
 Each on S1:A and T1:A:left, 20 rollouts each (the expert passes them, so failures are the policy's); ACT and SmolVLA in `scripts/stress.sh`, DP in `scripts/eval_dp.sh`. Report per policy and condition, against the train condition on the same seeds, with the failed checks.
 
-**Step 6 (optional): residual RL (`sim/residual.py`, written and tested; parked).** Only if step 5 finds a gap a residual can plausibly close, such as recovery from a mid-episode disturbance, the robustness ResiP (Ankile et al. 2024) and Policy Decorator (Yuan et al., ICLR 2025) report. Design: the frozen base plans a chunk from the cameras every `PLAN_EVERY` = 25 frames; a residual adds a bounded correction (≤ `RES_SCALE` = 0.05 rad per joint) from the joints, the base command, the simulator's state and the one-hot variant; PPO on the evaluation's own result, training seeds only. `tests/test_residual.py` checks the wrapper (the expert's commands as base chunks succeed and stop; a zero residual changes nothing). The residual's use of simulator state is privileged information, to be stated with any result.
+**Step 6 (planned): residual RL (`sim/residual.py`, written and tested; not run).** Only if step 5 finds a gap a residual can plausibly close, such as recovery from a mid-episode disturbance, the robustness ResiP (Ankile et al. 2024) and Policy Decorator (Yuan et al., ICLR 2025) report. Design: the frozen base plans a chunk from the cameras every `PLAN_EVERY` = 25 frames; a residual adds a bounded correction (≤ `RES_SCALE` = 0.05 rad per joint) from the joints, the base command, the simulator's state and the one-hot variant; PPO on the evaluation's own result, training seeds only. `tests/test_residual.py` checks the wrapper (the expert's commands as base chunks succeed and stop; a zero residual changes nothing). The residual's use of simulator state is privileged information, to be stated with any result.
 
 **Imbalance:** T1 has two thirds of the scene's episodes, so a policy that always continues may be rewarded (though by frames at the decision point, S1's 2 s hold may outweigh it). Recorded 50 per command and trained step 3 without reweighting: no lean (no S1 rollout continued, every T1 rollout did), so none is needed; research and decision in [3train_evaluation.md](3train_evaluation.md), finding 5.
 
-**On hold:** S2, S3, S4 and T2 (their scenes and data); the middle target; the chained-primitive and zero-shot composition tests (steps 13–14, which need the S4 command; the natural next addition is S4 plus S2 from the fully-open scene, so that scene is shared too); π0 and the per-variant T1 baseline (Diffusion Policy moved into the minimal plan as step 3b). What the minimal version gives up: the hand-over is shown inside one command (T1), not as two primitive commands chained.
+**Planned (not run):** S2, S3, S4 and T2 (their scenes and data); the middle target; the chained-primitive and zero-shot composition tests (steps 13–14, which need the S4 command; the natural next addition is S4 plus S2 from the fully-open scene, so that scene is shared too); π0 and the per-variant T1 baseline (Diffusion Policy moved into the minimal plan as step 3b). What the minimal version gives up: the hand-over is shown inside one command (T1), not as two primitive commands chained.
 
 **Code for the minimal plan (written and checked end to end):**
 - Variant input: `RZ.variant_vector` (11 dims, `VARIANT_DIMS`), added to a dataset by `python -m sim.dataset_view SRC DST --variant-input` as `observation.environment_state`, which LeRobot's ACT takes as an extra encoder input, unnormalised. `sim/evaluate.py` supplies it when the policy has it. Checked: ACT trains on it, and a rollout gets the vector.
 - Continue rate in `sim/evaluate.py`: once T1's drawer is open (or T2's cube is in), the second arm leaves home before the horizon ends. `test_expert_commands_succeed_in_rollout` replays S1 (stops) and T1 (continues).
 - SmolVLA: `bash cloud/train.sh smolvla DATASET OUT` fine-tunes `lerobot/smolvla_base` (LeRobot's recipe: batch 64, 20k steps), mapping our cameras onto its `camera1`–`camera3`. Checked on the Mac (training on MPS, then a rollout through `sim/evaluate.py`). The recipe needs a CUDA GPU: on this Mac's GPU it takes 0.55 s per sample whatever the batch, ~8 days for the 1.28M samples (3train_evaluation.md, finding 6). Steps: [4cloud_training.md](4cloud_training.md).
 
-## Full plan (on hold beyond the minimal version): data and training, step by step
+## Full plan (planned beyond the minimal version): data and training, step by step
 
 A **variant** is one task with one arm and one target, i.e. one exact command (in T1 the arm is the opener, in T2 the placer). There are 20: S1 2 (arm), S2 2 (arm), S3 2 (arm), S4 6 (arm × target), T1 6 (direction × target), T2 2 (direction).
 
